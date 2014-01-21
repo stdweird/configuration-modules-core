@@ -5,40 +5,29 @@ variable OSDS = nlist (
     'osd.0', nlist(
         'id', 0,
         'host', 'ceph002', 
-        'name', 'osd.0',
-        'uuid', 'caers5d54',
     ),
     'osd.2', nlist(
         'id', 2,
         'host', 'ceph002', 
-        'name', 'osd.2',
-        'uuid', 'caer5dds4',
     ),
     'osd.1', nlist(
         'id', 1,
         'host', 'ceph003', 
-        'name', 'osd.1',
-        'uuid', 'ca3sa8354'
     ),
     'osd.3', nlist(
         'id', 3,
         'host', 'ceph003', 
-        'name', 'osd.3',
-        'uuid', 'cas34ds4'
     )
 );
 
 variable MONITOR1 =  nlist(
-    'name', 'ceph002',
     'up', true,
 );
 variable MONITOR2 =  nlist(
-    'name', 'ceph001',
     'up', true,
 );
 variable MONITOR3 =  nlist(
-    'name', 'ceph003',
-    'up', false,
+    'up', true,
 );
 
 variable CONFIG = nlist (
@@ -55,6 +44,16 @@ prefix '/software/components/ceph/clusters';
         'ceph001', MONITOR2,
         'ceph002', MONITOR1,
         'ceph003', MONITOR3
-    )   
+    ),
+    'deployhosts', nlist (
+        'ceph002', 'ceph002.cubone.os'
+    )
+
 );         
 
+'/system/network/hostname' = 'ceph003';
+'/system/network/domainname' = 'cubone.os';
+
+'/software/components/accounts/users/ceph' = 
+    nlist('homeDir', '/tmp', 'gid', '111' );
+'/software/components/accounts/groups/ceph' = nlist('gid', '111');

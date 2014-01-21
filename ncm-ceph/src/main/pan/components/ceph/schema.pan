@@ -9,7 +9,6 @@ include { 'quattor/schema' };
 
 @{ type for a generic ceph daemon @}
 type ceph_daemon = {
-    'name'  : string
     'up'    ? boolean = true
 };
 
@@ -36,10 +35,14 @@ type ceph_msd = {
 @{ ceph cluster-wide config parameters @}
 type ceph_cluster_config = {
     'fsid'                      : string
-    'filestore_xattr_use_omap'  ? boolean = true
-    'osd_journal_size'          ? long(0..) = 10240
+    'filestore_xattr_use_omap'  : boolean = true
+    'osd_journal_size'          : long(0..) = 10240
     'mon_initial_members'       : string [1..]
-    'auth_supported'            ? string = 'cephx'
+    'public_network'            : string #TODO: check/write type for this
+    'auth_supported'            : string = 'cephx'
+    'auth_service_required'     : string = 'cephx'
+    'auth_client_required'      : string = 'cephx'
+    'auth_cluster_required'     : string = 'cephx'
 };
 
 @{ overarching ceph cluster type, with osds, mons and msds @}
