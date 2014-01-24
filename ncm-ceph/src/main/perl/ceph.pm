@@ -66,8 +66,7 @@ sub run_command {
 # run a command prefixed with ceph and return the output in json format
 sub run_ceph_command {
     my ($self, $command) = @_;
-    unshift (@$command, qw(/usr/bin/ceph -f json));
-    push (@$command, ('--cluster', $self->{cluster}));
+    unshift (@$command, ('/usr/bin/ceph', '-f', 'json','--cluster', $self->{cluster}));
     return $self->run_command($command);
 }
 
@@ -76,6 +75,31 @@ sub run_daemon_command {
     unshift (@$command, qw(/etc/init.d/ceph));
     return $self->run_command($command);
 }
+#checks for shell escapes
+sub shell_escapes {
+    my ($self, $cmd) = @_;
+    if (grep(m{[;&>|"']}, @$cmd) ) {
+        $self->error("Invalid shell escapes found in ", 
+            join(" ", @$cmd));
+        return 0;
+    }
+    return 1;
+}
+    
+#Runs a command as the ceph user
+sub run_command_as_ceph {
+    my ($self, $command, $dir) = @_;
+    
+    $self->shell_escapes($command) or return 0; 
+    if ($dir) {
+        $self->shell_escapes($dir) or return 0;
+        unshift (@$command, ('cd', $dir, '&&'));
+    }
+    $command = [join(' ',@$command)];
+    unshift (@$command, qw(su - ceph -c));
+    return $self->run_command($command);
+}
+
 
 # run a command prefixed with ceph-deploy and return the output (no json)
 sub run_ceph_deploy_command {
@@ -85,22 +109,7 @@ sub run_ceph_deploy_command {
         unshift (@$command, '--overwrite-conf');
     }
     unshift (@$command, ('/usr/bin/ceph-deploy', '--cluster', $self->{cluster}));
-    if (grep(m{[;&>|"']}, @$command) ) {
-        $self->error("Invalid shell escapes found in command ", 
-            join(" ", @$command));
-        return 0;
-    }
-    if ($dir) {
-        if (grep(m{[;&>|"']}, $dir)) {
-            $self->error("Invalid shell escapes found in directory ", 
-                join(" ", $dir));
-            return 0;
-        }
-        unshift (@$command, ('cd', $dir, '&&'));
-    }
-    $command = [join(' ',@$command)];
-    unshift (@$command, qw(su - ceph -c));
-    return $self->run_command($command);
+    return $self->run_command_as_ceph($command, $dir);
 }
 
 ## Retrieving information of ceph cluster
@@ -263,6 +272,17 @@ sub push_cfg {
     }     
 }
 
+# Makes the changes in the config file realtime by using ceph injectargs
+sub inject_realtime {
+    my ($self, $host, $changes) = @_;
+    my @cmd;
+    for my $param (keys %{$changes}) {
+        @cmd = ('tell',"*.$host",'injectargs','--');
+        my $keyvalue = "--$param=$changes->{$param}";
+        $self->info("injecting $keyvalue realtime on $host");
+        $self->run_ceph_command([@cmd, $keyvalue]);
+    }
+}
 # Pulls config from host, compares it with quattor config and pushes the config back if needed
 sub pull_compare_push {
     my ($self, $config, $host) = @_;
@@ -272,13 +292,15 @@ sub pull_compare_push {
         
     } else {
         $self->{comp} = 1;
+        $self->{cfgchanges} = {};
         $self->debug(3, "Pulled config:", %$cconf);
         $self->ceph_quattor_cmp('cfg', $config, $cconf) or return 0;
         if ($self->{comp} == 1) {
             #Config the same, no push needed
             return 1;
         } elsif ($self->{comp} == -1) {
-            return $self->push_cfg($host,1);
+            $self->push_cfg($host,1) or return 0;
+            $self->inject_realtime($host, $self->{cfgchanges}) or return 0;
         } else {# 0 already catched
             $self->error('No valid value returned after comparison');
             return 0;
@@ -303,10 +325,11 @@ sub config_cfgfile {
     }   
     if ($action eq 'add'){
         $self->info("$name added to config file\n");
-        if ($name eq 'mon_initial_members'){
+        if (ref($values) eq 'ARRAY'){
             $values = join(',',@$values); 
         }
         $self->{comp} = -1;
+        $self->{cfgchanges}->{$name} = $values;
 
     } elsif ($action eq 'change') {
         my $quat = $values->[0];
@@ -318,9 +341,11 @@ sub config_cfgfile {
         if ($quat ne $ceph) {
             $self->info("$name changed from $ceph to $quat\n");
             $self->{comp} = -1;
+            $self->{cfgchanges}->{$name} = $quat;
         }
     } elsif ($action eq 'del'){
-        #TODO If we want to keep the existing configuration settings that are not in Quattor, we need to log it here. For now we expect that every used config parameter is in Quattor
+        # TODO If we want to keep the existing configuration settings that are not in Quattor, 
+        # we need to log it here. For now we expect that every used config parameter is in Quattor
         $self->error("$name not in quattor\n");
         #$self->info("$name deleted from config file\n");
         $self->{comp} = -1;
@@ -366,6 +391,12 @@ sub config_mon {
             }
             push (@command, "mon.$name");
             push (@{$self->{daemon_cmds}}, [@command]);
+        }
+        my @donecmd = ('/usr/bin/ssh', $name, 'test','-e',"/var/lib/ceph/mon/$self->{cluster}-$name/done" );
+        if (!$cephmon->{up} && !$self->run_command_as_ceph([@donecmd])) {
+            # Node reinstalled without first destroying it
+            $self->info("Monitor $name shall be reinstalled");
+            return $self->config_mon('add',$name,$quatmon);
         }
     }
     else {
