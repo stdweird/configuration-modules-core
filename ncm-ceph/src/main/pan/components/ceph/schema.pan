@@ -27,8 +27,8 @@ type ceph_osd = {
     'journal_path'  ? string
 };
 
-@{ ceph msd-specific type @}
-type ceph_msd = {
+@{ ceph mds-specific type @}
+type ceph_mds = {
      include ceph_daemon
 };
 
@@ -39,7 +39,6 @@ type ceph_cluster_config = {
     'osd_journal_size'          : long(0..) = 10240
     'mon_initial_members'       : string [1..]
     'public_network'            : string #TODO: check/write type for this
-    'auth_supported'            : string = 'cephx'
     'auth_service_required'     : string = 'cephx'
     'auth_client_required'      : string = 'cephx'
     'auth_cluster_required'     : string = 'cephx'
@@ -50,7 +49,7 @@ type ceph_cluster = {
     'config'                    : ceph_cluster_config
     'osds'                      : ceph_osd {}
     'monitors'                  : ceph_monitor {1..}
-    'msds'                      ? ceph_msd {}
+    'mdss'                      ? ceph_mds {}
     'deployhosts'               : type_fqdn {1..}
 };
 

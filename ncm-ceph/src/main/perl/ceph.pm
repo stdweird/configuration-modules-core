@@ -34,6 +34,12 @@ use Readonly;
 use Config::Tiny;
 
 our $EC=LC::Exception::Context->new->will_store_all;
+Readonly::Array my @noninject => qw(
+    mon_host 
+    mon_initial_members
+    public_network
+    filestore_xattr_use_omap
+);
 
 #set the working cluster, (if not given, use the default cluster 'ceph')
 sub use_cluster {
@@ -253,15 +259,28 @@ sub mon_hash {
     }
     return \%monparsed;
 }
-# Gets the MSD map 
-sub msd_hash {
-     my ($self) = @_;
-    # TODO implement
+# Gets the MDS map 
+sub mds_hash {
+    my ($self) = @_;
+    my $jstr = $self->run_ceph_command([qw(mds stat)]) or return 0;
+    my $mdshs = decode_json($jstr);
+    my %mdsparsed = ();
+    foreach my $mds (values %{$mdshs->{mdsmap}->{info}}) {
+        my @state = split(':', $mds->{state});
+        my $up = ($state[0] eq 'up') ? 1 : 0 ;
+        my $mdsp = {
+            name => $mds->{name},
+            gid => $mds->{gid},
+            up => $up
+        };
+        $mdsparsed{$mds->{name}} = $mdsp;
+    }
+    return \%mdsparsed;
 }       
 ## Processing and comparing between Quattor and Ceph
 
 # Do a comparison of quattor config and the actual ceph config 
-# for a given type (cfg, mon, osd, msd)
+# for a given type (cfg, mon, osd, mds)
 sub ceph_quattor_cmp {
     my ($self, $type, $quath, $cephh) = @_;
     foreach my $qkey (sort(keys %{$quath})) {
@@ -306,11 +325,11 @@ sub process_osds {
     return $self->ceph_quattor_cmp('osd', $qosds, $cosds);
 }
 
-# Compare cephs msd with the quattor msds
-sub process_msds {
-    my ($self, $qmsds) = @_;
-    my $cmsds = $self->msd_hash() or return 0;
-    return $self->ceph_quattor_cmp('msd', $qmsds, $cmsds);
+# Compare cephs mds with the quattor mds
+sub process_mdss {
+    my ($self, $qmdss) = @_;
+    my $cmdss = $self->mds_hash() or return 0;
+    return $self->ceph_quattor_cmp('mds', $qmdss, $cmdss);
 }
 
 # Move old config files to old dir with timestamp
@@ -367,11 +386,14 @@ sub inject_realtime {
     my ($self, $host, $changes) = @_;
     my @cmd;
     for my $param (keys %{$changes}) {
-        @cmd = ('tell',"*.$host",'injectargs','--');
-        my $keyvalue = "--$param=$changes->{$param}";
-        $self->info("injecting $keyvalue realtime on $host");
-        $self->run_ceph_command([@cmd, $keyvalue]);
+        if (!($param ~~ @noninject)) { # Requires Perl > 5.10 !
+            @cmd = ('tell',"*.$host",'injectargs','--');
+            my $keyvalue = "--$param=$changes->{$param}";
+            $self->info("injecting $keyvalue realtime on $host");
+            $self->run_ceph_command([@cmd, $keyvalue]) or return 0;
+        }
     }
+    return 1;
 }
 # Pulls config from host, compares it with quattor config and pushes the config back if needed
 sub pull_compare_push {
@@ -554,17 +576,37 @@ sub config_osd {
     return 1;
 }
 
-# Prepare the commands to change/add/delete an msd
-sub config_msd {
+# Prepare the commands to change/add/delete an mds
+sub config_mds {
     my ($self,$action,$name,$daemonh) = @_;
-    # TODO implement
     if ($action eq 'add'){
-    
+        my @donecmd = ('/usr/bin/ssh', $name, 'test','-e',"/var/lib/ceph/mds/$self->{cluster}-$name/done" );
+        my $mds_exists = $self->run_command_as_ceph([@donecmd]);
+        
+        if ($mds_exists) { # A down ceph mds daemon is not in map
+            if ($daemonh->{up}) {
+                my @command = ('start', "mds.$name");
+                push (@{$self->{daemon_cmds}}, [@command]);
+            }
+        } else {
+            my @command = qw(mds create);
+            push (@command, $name);
+            push (@{$self->{deploy_cmds}}, [@command]);
+        }   
     } elsif ($action eq 'del') {
+        my @command = qw(mds destroy);
+        push (@command, $name);
+        push (@{$self->{man_cmds}}, [@command]);
     
+    } elsif ($action eq 'change') {
+        my $quatmds = $daemonh->[0];
+        my $cephmds = $daemonh->[1];
+        # Note: A down ceph mds daemon is not in map
+        $self->check_state($name, $name, 'mds', $quatmds, $cephmds);
     } else {
-
-    } 
+        $self->error("Action $action not supported!");
+    }
+    return 1;
 }
 
 
@@ -580,8 +622,8 @@ sub config_daemon {
     elsif ($type eq 'osd'){
         $self->config_osd($action,$name,$daemonh);
     }
-    elsif ($type eq 'msd'){
-        $self->config_msd($action,$name,$daemonh);
+    elsif ($type eq 'mds'){
+        $self->config_mds($action,$name,$daemonh);
     } else {
         $self->error("No such type: $type\n");
     }
@@ -743,9 +785,7 @@ sub check_configuration {
     $self->process_config($cluster->{config}) or return 0;
     $self->process_mons($cluster->{monitors}) or return 0;
     $self->process_osds($cluster->{osds}) or return 0;
-#    if ($cluster->{msds}) {
-#        $self->process_msds($cluster->{msds}) or return 0;
-#    }
+    $self->process_mdss($cluster->{mdss}) or return 0;
     return 1;
 }
 
