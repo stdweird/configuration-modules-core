@@ -21,16 +21,22 @@ use base qw(NCM::Component);
 
 use LC::Exception;
 use LC::Find;
-use LC::File qw(copy makedir);
+use LC::File qw(makedir);
 
 use CAF::FileWriter;
 use CAF::FileEditor;
 use CAF::Process;
+# taint-safe since 1.23;
+# Packages @ http://www.city-fan.org/ftp/contrib/perl-modules/RPMS.rhel6/ 
+# Attention: Package has some versions like 1.2101 and 1.2102 .. 
+use Data::Compare 1.23 qw(Compare);
+use Data::Dumper;
 use Config::Tiny;
 use EDG::WP4::CCM::Element qw(unescape);
 use File::Basename;
 use File::Path qw(make_path);
-use File::Copy qw(move);
+use File::Copy qw(copy move);
+use List::Util qw( min max );
 use JSON::XS;
 use Readonly;
 
@@ -43,6 +49,7 @@ Readonly::Array my @noninject => qw(
 );
 Readonly my $OSDBASE => qw(/var/lib/ceph/osd/);
 Readonly my $JOURNALBASE => qw(/var/lib/ceph/log/);
+Readonly my $CRUSH_TT_FILE => 'ceph/crush.tt';
 
 #set the working cluster, (if not given, use the default cluster 'ceph')
 sub use_cluster {
@@ -73,9 +80,9 @@ sub run_command {
         $self->{lasterr} = $cmd_err;
         return 0;
     } else {
-        $self->debug(2,"Command output: $cmd_output\n");
+        $self->verbose(2,"Command output: $cmd_output\n");
         if ($cmd_err) {
-            $self->warn("Command stderr output: $cmd_err\n");
+            $self->verbose("Command stderr output: $cmd_err\n");
             $self->{lasterr} = $cmd_err;
         }    
     }
@@ -91,9 +98,10 @@ sub run_ceph_command {
 
 sub run_daemon_command {
     my ($self, $command) = @_;
-    unshift (@$command, qw(/etc/init.d/ceph));
+    unshift (@$command, qw(/sbin/service ceph));
     return $self->run_command($command);
 }
+
 #checks for shell escapes
 sub shell_escapes {
     my ($self, $cmd) = @_;
@@ -204,6 +212,16 @@ sub osd_hash {
     }
     return \%osdparsed;
 }
+
+# Get the osd name from the host and path
+sub get_osd_name {
+    my ($self, $host, $location) = @_;
+    my @catcmd = ('/usr/bin/ssh', $host, 'cat');
+    my $id = $self->run_command_as_ceph([@catcmd, "$location/whoami"]) or return 0;
+    chomp($id);
+    $id = $id + 0; # Only keep the integer part
+    return "osd.$id";
+}   
 
 # Check/gets the OSDs underlying disk/path 
 # checks whoami,fsid and ceph_fsid and returns the real path
@@ -349,6 +367,7 @@ sub flatten_osds {
                 $newosd->{journal_path} = $JOURNALBASE . $newosd->{journal_path};
             }
             $newosd->{osd_path} = $osdpath;
+            $osds->{$osd}->{osd_path} = $osdpath;
             my $osdstr = "$host:$osdpath" ;
             $flat{$osdstr} = $newosd;
         }
@@ -359,6 +378,7 @@ sub flatten_osds {
 sub process_osds {
     my ($self, $qosds) = @_;
     my $qflosds = $self->flatten_osds($qosds);
+    $self->debug(5, 'OSD lay-out', Dumper($qosds));
     my $cosds = $self->osd_hash() or return 0;
     return $self->ceph_quattor_cmp('osd', $qflosds, $cosds);
 }
@@ -730,7 +750,8 @@ sub init_qdepl {
     my $cephusr = $self->{cephusr};
     my $qdir = $cephusr->{homeDir} . '/ncm-ceph/' ;
     my $odir = $qdir . 'old/' ;
-    make_path($qdir, $odir, {owner=>$cephusr->{uid}, group=>$cephusr->{gid}});
+    my $crushdir = $qdir . 'crushmap/' ;
+    make_path($qdir, $odir, $crushdir, {owner=>$cephusr->{uid}, group=>$cephusr->{gid}});
 
     $self->{qtmp} = $qdir; 
     
@@ -768,11 +789,14 @@ sub cluster_ready_check {
             # Manual commands for new cluster  
             # Push to deploy_cmds (and pre-run dodeploy) for automation, 
             # but take care of race conditions
-            my @newcmd = qw(/usr/bin/ceph-deploy new);
+            
+            my @newcmd = qw(new);
             foreach my $host (@{$hosts}) {
                 push (@newcmd, $host);
             }
-            push (@{$self->{man_cmds}}, [@newcmd]);
+            if (!-f "$self->{cephusr}->{homeDir}/$self->{cluster}.mon.keyring"){
+                $self->run_ceph_deploy_command([@newcmd]);
+            }
             my @moncr = qw(/usr/bin/ceph-deploy mon create-initial);
             push (@{$self->{man_cmds}}, [@moncr]);
             $self->init_qdepl($cluster->{config});
@@ -816,7 +840,7 @@ sub set_admin_host {
         $self->pull_compare_push($config, $host) or return 0;
         my @admins=qw(admin);
         push(@admins, $host);
-        $self->run_ceph_deploy_command(\@admins); 
+        $self->run_ceph_deploy_command(\@admins,'',1 ); #overwrite for stupid ceph deploy
     }
 }
 # Compare the configuration (and prepare commands) 
@@ -828,6 +852,379 @@ sub check_configuration {
     $self->process_osds($cluster->{osdhosts}) or return 0;
     $self->process_mdss($cluster->{mdss}) or return 0;
     return 1;
+}
+
+# Do actions after deploying of daemons and global configuration
+sub do_post_actions {
+    my ($self, $cluster) = @_;
+    $self->process_crushmap($cluster->{crushmap}, $cluster->{osdhosts}) or return 0;
+    return 1;
+}
+
+# Get crushmap and store backup
+sub ceph_crush {
+    my ($self) = @_;
+    my $jstr = $self->run_ceph_command([qw(osd crush dump)]) or return 0;
+    my $crushdump = decode_json($jstr); #wrong weights, but ignored at this moment
+    my $crushdir = $self->{qtmp} . 'crushmap';
+    $self->run_ceph_command(['osd', 'getcrushmap', '-o', "$crushdir/crushmap.bin"]);
+    $self->run_command(['/usr/bin/crushtool', '-d', "$crushdir/crushmap.bin", '-o', "$crushdir/crushmap"]);
+    return $crushdump;
+}
+
+# Merge the osd info in the crushmap hierarchy
+sub crush_merge {
+    my ($self, $buckets, $osdhosts, $devices) = @_;
+    foreach my $bucket ( @{$buckets}) {
+        my $name = $bucket->{name};
+        if ($bucket->{buckets}) {
+            # Recurse.
+
+            if (!$self->crush_merge($bucket->{buckets}, $osdhosts, $devices)){
+                $self->debug(2, "Failed to merge buckets of $bucket->{name} with osds\n",
+                    "Buckets:", Dumper($bucket->{buckets}));  
+                return 0;
+            }
+        } else {
+            if ($bucket->{type} eq 'host') {
+                if ($osdhosts->{$name}){
+                    my $osds = $osdhosts->{$name}->{osds};
+                    $bucket->{buckets} = [];
+                    foreach my $osd (sort(keys %{$osds})){
+                        my $osdname = $self->get_osd_name($name, $osds->{$osd}->{osd_path});
+                        if (!$osdname) {
+                            $self->error("Could not find osd name for", 
+                                $osds->{$osd}->{osd_path}, "on $name");
+                            return 0;
+                        }
+                        my $osdb = { 
+                            name => $osdname, 
+                            weight => $osds->{$osd}->{crush_weight}, 
+                            type => 'osd'
+                        };
+                        push(@{$bucket->{buckets}}, $osdb);
+                        (my $id = $osdname) =~ s/^osd\.//;
+                        my $device = { 
+                            id => $id, 
+                            name => $osdname 
+                        };
+                        push(@$devices, $device);
+                    }
+                } else {
+                    $self->error("No such hostname in ceph cluster: $name");
+                    return 0;
+                }    
+            }
+        }
+    }
+    return 1;
+}
+
+# Escalate the weights that has been set
+sub set_weights {
+    my ($self, $bucket ) = @_;
+    if (!$bucket->{buckets}) {
+        if ($bucket->{type} ne 'osd') {
+            $self->error('Lowest level of crushmap should be an OSD, but ', $bucket->{name},
+                ' has no child buckets and is not an osd!' );
+            return;
+        }
+    } else {
+        my $weight = 0.00;
+        foreach my $child (@{$bucket->{buckets}}) {
+            my $chweight = $self->set_weights($child);
+            if (!defined($chweight)) {
+                $self->debug(1, "Something went wrong when getting weight of $child->{name}");
+                return;
+            } 
+            $weight += $chweight;
+        }
+        if (!$bucket->{weight}){
+            $bucket->{weight} = $weight;
+        } elsif ($weight != $bucket->{weight}) {
+            $self->warn("Bucket weight of $bucket->{name} ", 
+                "in Quattor differs from the sum of the child buckets!\n",
+                "Quattor: $bucket->{weight} \n", 
+                "Sum: $weight");
+        }
+    }
+    return $bucket->{weight};
+}
+
+# Makes an one-dimensional array of buckets from a hierarchical one.
+# Also fix default attributes (See Quattor schema)
+sub flatten_buckets {
+    my ($self, $buckets, $flats, $defaults) = @_;
+    my $titems = [];
+    foreach my $tmpbucket ( @{$buckets}) {
+        # First fix attributes
+        my $bdefaults;
+        if (!$defaults) { # Assume processing top level bucket
+            $bdefaults = {
+                alg => $tmpbucket->{defaultalg},
+                hash => $tmpbucket->{defaulthash},
+            };
+        } else {
+            $bdefaults = $defaults;
+        }
+        my %bucketh;
+        #set default values
+        @bucketh{ keys %$bdefaults} = values %$bdefaults;
+        # update with tmpbucket
+        @bucketh{keys %$tmpbucket} = values %$tmpbucket;
+        my $bucket = \%bucketh;
+        
+        push(@$titems, { name => $bucket->{name}, weight => $bucket->{weight} });
+        if ($bucket->{buckets}) {
+            my $citems = $self->flatten_buckets($bucket->{buckets}, $flats, $bdefaults);         
+            $bucket->{items} = $citems; 
+            delete $bucket->{buckets};
+        
+        }
+        if($bucket->{type} ne 'osd'){
+            push(@$flats, $bucket);
+        }
+    }
+    return $titems;
+}
+
+# Build up the quattor crushmap
+sub quat_crush {
+    my ($self, $crushmap, $osdhosts) = @_;
+    my @newtypes = ();
+    my $type_id = 0;
+    my ($type_osd, $type_host);
+    foreach my $type (@{$crushmap->{types}}) {
+        #Must at least contain 'host' and 'osd', because we do the merge on these types.
+        if ($type eq 'osd') {
+            $type_osd = 1;
+        } elsif ($type eq 'host') {
+            $type_host = 1;
+        } 
+        push(@newtypes, { type_id => $type_id, name => $type });
+        $type_id +=1;
+    }
+    if (!$type_osd || !$type_host){
+        $self->error("list of types should at least contain 'osd' and 'host'!");
+        return 0; 
+    }
+    $crushmap->{types} = \@newtypes;
+
+    my $devices = [];
+    if (!$self->crush_merge($crushmap->{buckets}, $osdhosts, $devices)){
+        $self->error("Could not merge the required information into the crushmap");
+        return 0;
+    }
+    my @sorted = sort { $a->{id} <=> $b->{id} } @$devices;
+    $crushmap->{devices} = \@sorted;
+    foreach my $bucket (@{$crushmap->{buckets}}){
+        if (!defined($self->set_weights($bucket))) {
+            $self->debug(1, "Something went wrong when setting weight of $bucket->{name}");
+            return 0;
+        }
+    }
+    my $newbuckets=[];
+    $self->flatten_buckets($crushmap->{buckets}, $newbuckets);
+    $crushmap->{buckets} = $newbuckets;
+
+    return $crushmap;
+}
+
+# Collect the already used crush ids, all id's should be unique
+sub set_used_bucket_id {
+    my ($self, $id) = @_;
+    if (!$self->{crush_ids}) {
+        $self->{crush_ids} = [$id];
+    } else {
+        if ($id ~~ @{$self->{crush_ids}}) {
+            $self->error("ID $id already used in crushmap buckets!");
+            return 0;
+        } 
+        push(@{$self->{crush_ids}}, $id);
+    }
+    return 1;
+}
+
+# Collect the already used ruleset ids, id's can be the same
+sub set_used_ruleset_id {
+    my ($self, $id) = @_;
+    if (!$self->{ruleset_ids}) {
+        $self->{ruleset_ids} = [$id];
+    } else {
+        push(@{$self->{ruleset_ids}}, $id);
+    }
+    return 1;
+}
+
+# Generate an available (not used) ruleset id
+# Make sure the used id's are already inserted
+sub generate_ruleset_id {
+    my ($self) = @_;
+    my $newid;
+    if (!$self->{ruleset_ids}) { #crushmap from scratch
+        $newid = 0;
+    } else {
+        my $max = max(@{$self->{ruleset_ids}});
+        $newid = $max + 1;
+    }
+    $self->set_used_ruleset_id($newid);
+    return $newid;
+}
+
+# Generate an available (not used) crush bucket id
+# Make sure the used id's are already inserted
+sub generate_bucket_id {
+    my ($self) = @_;
+    my $newid;
+    if (!$self->{crush_ids}) { #crushmap from scratch
+        $newid = -1;
+    } else {
+        my $min = min(@{$self->{crush_ids}});
+        $newid = $min - 1;
+    }
+    $self->set_used_bucket_id($newid);
+    return $newid;
+}
+
+# Compare Crushmap buckets
+# Also get ids here
+sub cmp_crush_buckets {
+    my ($self, $cephbucks, $quatbucks) = @_;
+    foreach my $cbuck (@{$cephbucks}) {
+        my $found = 0;
+        foreach my $qbuck (@{$quatbucks}){
+            if ($cbuck->{name} eq $qbuck->{name}){
+                if ($cbuck->{type_name} ne $qbuck->{type}) {
+                    $self->warn("Type of $cbuck->{name} changed from $cbuck->{type_name} to $qbuck->{type}!");
+                }
+                if (!$self->set_used_bucket_id($cbuck->{id})) {
+                     $self->error("Could not set id of $cbuck->{name}!");
+                     return 0;
+                }
+                $qbuck->{id} = $cbuck->{id};
+                $found = 1;
+                last;
+            }
+        } 
+        if (!$found) {
+            $self->info("Existing ceph bucket $cbuck->{name} removed from quattor crushmap");
+        }
+    }
+    foreach my $qbuck (@{$quatbucks}){
+        if (!defined($qbuck->{id})){
+            $qbuck->{id} = $self->generate_bucket_id();
+            $self->info("Bucket $qbuck->{name} added to crushmap");
+        }     
+    }
+    return 1;
+}
+        
+# Comparing crushmap rules 
+# Also get rulesets here
+sub cmp_crush_rules {
+    my ($self, $cephrules, $quatrules) = @_;
+    foreach my $crule (@{$cephrules}) {
+        my $found = 0;
+        foreach my $qrule (@{$quatrules}){
+            if ($crule->{rule_name} eq $qrule->{name}){
+                if (defined($qrule->{ruleset})){
+                    if ($crule->{ruleset} ne $qrule->{ruleset}) {
+                        $self->warn("Ruleset of $qrule->{name} changed",
+                            "from $crule->{ruleset} to $qrule->{ruleset}!");
+                    }
+                } else {
+                    $qrule->{ruleset} = $crule->{ruleset};
+                }
+                $self->set_used_ruleset_id($qrule->{ruleset});
+                $found = 1;
+                last;
+            }
+        }
+        if (!$found) {
+            $self->info("Existing ceph rule $crule->{rule_name} removed from quattor crushmap");
+        }
+    }
+    foreach my $qrule (@{$quatrules}){
+        if (!defined($qrule->{ruleset})){
+            $qrule->{ruleset} = $self->generate_ruleset_id();
+            $self->info("Rule $qrule->{name} added to crushmap");
+        }     
+    }       
+     
+    return 1;
+}
+
+# Compare the generated crushmap with the installed one
+sub cmp_crush {
+    my ($self, $cephcr, $quatcr) = @_;
+    # Use already existing ids
+    # Devices: this should match exactly
+    if (!Compare($cephcr->{devices}, $quatcr->{devices})) {
+        $self->error("Devices list of Quattor does not match with devices in existing crushmap.");
+        return 0;
+    }
+    # Types
+    if (!Compare($cephcr->{types}, $quatcr->{types})) {
+        $self->warn("Types are changed in the crushmap!");
+    }    
+ 
+    # Buckets
+    $self->debug(2, "Comparing crushmap buckets"); 
+    $self->cmp_crush_buckets($cephcr->{buckets}, $quatcr->{buckets}) or return 0;
+        
+    # Rules 
+    $self->debug(2, "Comparing crushmap rules"); 
+    $self->cmp_crush_rules($cephcr->{rules}, $quatcr->{rules});
+     
+    return 1;
+}
+
+# write out the crushmap and install into cluster
+sub write_crush {
+    my ($self, $crush) = @_;
+    #Use tt files
+    my $crushdir = $self->{qtmp} . 'crushmap';
+    my $plainfile = "$crushdir/crushmap"; 
+
+    my $fh = CAF::FileWriter->new($plainfile, log => $self, 
+                                backup => "." . time() );
+    print $fh  "\n";
+    $self->debug(5, "Crushmap hash ready to be written to file:\n", Dumper($crush));
+    my $ok = $self->template()->process($CRUSH_TT_FILE, $crush, $fh);
+    if (!$ok) {
+        $self->error("Unable to render template ", $CRUSH_TT_FILE, ": ",
+                     $self->template()->error());
+        $fh->cancel();
+        $fh->close();
+        return 0;
+    }
+    my $changed = $fh->close();
+
+    if ($changed) {
+        # compile and set crushmap    
+        if (!$self->run_command(['/usr/bin/crushtool', '-c', "$plainfile", '-o', "$crushdir/crushmap.bin"])){
+            $self->error("Could not compile crushmap!");
+            return 0;
+        }
+        if (!$self->run_ceph_command(['osd', 'setcrushmap', '-o', "$crushdir/crushmap.bin"])) {
+            $self->error("Could not install crushmap!");
+            return 0;
+        }
+        $self->debug(1, "Changed crushmap installed");
+    } else {
+        $self->debug(2, "Crushmap not changed");
+    }
+    return 1;
+}   
+
+# Processes the Ceph CRUSHMAP
+sub process_crushmap {
+    my ($self, $crushmap, $osdhosts) = @_;
+    my $cephcr = $self->ceph_crush() or return 0;
+    my $quatcr = $self->quat_crush($crushmap, $osdhosts) or return 0;
+    $self->cmp_crush($cephcr, $quatcr) or return 0;
+
+    return $self->write_crush($quatcr);
 }
 
 #generate mon hosts
@@ -887,7 +1284,8 @@ sub Configure {
         $self->debug(1,"checking configuration\n");
         $self->check_configuration($cluster) or return 0;
         $self->debug(1,"deploying commands\n");
-        $self->do_deploy() or return 0; 
+        $self->do_deploy() or return 0;
+        $self->do_post_actions($cluster) or return 0; 
         $self->print_man_cmds();
         $self->debug(1,'Done');
         return 1;

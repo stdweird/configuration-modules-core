@@ -1,0 +1,15 @@
+[%- # to avoid possible vmethod issues (items and hash)
+    import(bk) -%]
+[%- IF type != 'osd'  -%]
+[%      type %] [% name %] {
+[%      FILTER indent -%]
+id [%       id %]
+# weight [% weight  %]
+alg [%      alg %]
+hash [%     hash %]
+[%          FOREACH item IN items -%]
+item [%         item.name %] weight [% item.weight %]
+[%          END %]
+[%-     END -%]
+}
+[%- END -%]
