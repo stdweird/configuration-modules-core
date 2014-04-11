@@ -1,4 +1,4 @@
-object template basic_crushmap_tt;
+object template labeled_crushmap;
 
 
 
@@ -53,19 +53,20 @@ prefix '/software/components/ceph/clusters/ceph';
 
 'crushmap' = nlist(
     'types' , list('osd','host','root'),
-    'tunables', nlist(
-        'test_tune', 0
-    ),
     'rules', list (
         nlist(
             'name', 'data',
+            'type', 'replicated',
+            'min_size', 0,
+            'max_size', 10,
             'steps', list(
                 nlist(
                     'take', 'default', 
                     'choices', list(
                         nlist(
                             'chtype', 'chooseleaf firstn',
-                            'bktype', 'host'
+                            'bktype', 'host',
+                            'number', 0,
                         ),
                     ),
                 ),
@@ -73,13 +74,17 @@ prefix '/software/components/ceph/clusters/ceph';
         ),
         nlist(
             'name', 'metadata',
+            'type', 'replicated',
+            'min_size', 0,
+            'max_size', 10,
             'steps', list(
                 nlist(
                     'take', 'default', 
                     'choices', list(
                         nlist(
                             'chtype', 'chooseleaf firstn',
-                            'bktype', 'host'
+                            'bktype', 'host',
+                            'number', 0,
                         ),
                     ),
                 ),
@@ -87,13 +92,17 @@ prefix '/software/components/ceph/clusters/ceph';
         ),
         nlist(
             'name', 'rbd',
+            'type', 'replicated',
+            'min_size', 0,
+            'max_size', 10,
             'steps', list(
                 nlist(
                     'take', 'default', 
                     'choices', list(
                         nlist(
                             'chtype', 'chooseleaf firstn',
-                            'bktype', 'host'
+                            'bktype', 'host',
+                            'number', 0,
                         ),
                     ),
                 ),
@@ -106,6 +115,7 @@ prefix '/software/components/ceph/clusters/ceph';
             'type', 'root',
             'defaultalg', 'straw',
             'defaulthash', 0,
+            'labels', list('tst-0', 'tst-1'), 
             'buckets', list(
                 nlist(
                     'name', 'ceph001',
@@ -132,7 +142,8 @@ prefix '/software/components/ceph/clusters/ceph';
             jdx= odx % length(CEPH_JOURNAL_DISKS); ## RR over journal disks
             d[disk] = nlist(
                 'journal_path', format('/var/lib/ceph/log/%s/osd-%s/journal', CEPH_JOURNAL_DISKS[jdx], disk),
-                'crush_weight', CEPH_DEFAULT_OSD_WEIGHT
+                'crush_weight', CEPH_DEFAULT_OSD_WEIGHT,
+                'labels', list(format('tst-%s', jdx))
             );
         };
         t[host] = nlist(
