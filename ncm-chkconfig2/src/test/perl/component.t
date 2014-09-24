@@ -24,7 +24,7 @@ test_off           0:off   1:off   2:off   3:off   4:on    5:off   6:off
 test_del           0:off   1:off   2:off   3:off   4:off   5:off   6:off
 EOF
 
-set_desired_output("/sbin/chkconfig --list",$CHKCONFIG_LIST_OUTPUT);
+set_desired_output("/sbin/chkconfig --list", $CHKCONFIG_LIST_OUTPUT);
 
 set_desired_output("/sbin/runlevel","N 5");
 
