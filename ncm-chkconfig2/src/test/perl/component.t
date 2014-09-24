@@ -29,7 +29,7 @@ set_desired_output("/sbin/chkconfig --list", $CHKCONFIG_LIST_OUTPUT);
 set_desired_output("/sbin/runlevel","N 5");
 
 my $cfg = get_config_for_profile('simple_services');
-my $cmp = NCM::Component::chkconfig2->new('chkconfig');
+my $cmp = NCM::Component::chkconfig2->new('chkconfig2');
 
 is($cmp->Configure($cfg), 1, "Component runs correctly with a test profile");
 

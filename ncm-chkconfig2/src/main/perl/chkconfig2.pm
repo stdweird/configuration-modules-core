@@ -2,22 +2,7 @@
 # ${developer-info}
 # ${author-info}
 
-#######################################################################
-#
-# chkconfig component
-#
-# NCM chkconfig component
-#
-#
-# For license conditions see http://www.eu-datagrid.org/license.html
-#
-#######################################################################
-
 package NCM::Component::${project.artifactId};
-
-#
-# a few standard statements, mandatory for all components
-#
 
 use strict;
 use NCM::Component;
@@ -25,10 +10,10 @@ use vars qw(@ISA $EC);
 @ISA = qw(NCM::Component);
 
 use NCM::Check;
-use EDG::WP4::CCM::Element qw(unescape);
 use CAF::Process;
 use CAF::Service;
 use Readonly;
+use EDG::WP4::CCM::Element qw(unescape);
 
 $EC=LC::Exception::Context->new->will_store_all;
 $NCM::Component::${project.artifactId}::NoActionSupported = 1;
@@ -60,6 +45,7 @@ Readonly my $LEVEL_MULTIUSER => "multi-user";
 Readonly my $LEVEL_GRAPHICAL => "graphical";
 Readonly my $DEFAULT_LEVEL => $LEVEL_MULTIUSER; # default level
 
+
 # Convert the legacy levels to new systemsctl ones
 # C<legacylevel> is a string with integers e.g. "234"
 sub convert_legacy_levels 
@@ -80,7 +66,7 @@ sub convert_legacy_levels
     };    
     
     $self->verbose("Converted legacylevel '$legacylevel' in ".join(', ', @levels));
-    return @levels;
+    return \@levels;
 }
 
 
@@ -96,7 +82,8 @@ sub get_quattor_legacy_services
     my $stree = $config->getElement("$LEGACY_BASE/service")->getTree;
     while (my ($service, $detail) = each %$stree) {
         # fix the details to reflect new schema
-        # also set the name (not mandatory in new schema; for convenience)
+        
+        # set the name (not mandatory in new schema either)
         $detail->{name} = unescape($service) if (! exists($detail->{name}));
 
         my $reset = delete $detail->{reset};
@@ -118,13 +105,43 @@ sub get_quattor_legacy_services
         } elsif($add) {
             $state = "add";
         }
+
+        $detail->{state} = $state;
+
+        my $leveltxt;
+        # off-level precedes on-level (as off state preceds on state)
+        if(defined($off)) {
+            $leveltxt = $off;
+        } elsif(defined($on)) {
+            $leveltxt = $on;
+        }
+        $detail->{levels} = $self->convert_legacy_levels($leveltxt);
         
         # startstop mandatory
         $detail->{startstop} = $DEFAULT_STARTSTOP if (! exists($detail->{startstop}));
+
+        $self->verbose("Add legacy service $service (name $detail->{name})");
+        $services{$service}=$detail;
                 
     };
+
     return %services;    
 }
+
+
+# convert service details hash to string
+sub service_text
+{
+    my ($self, $detail) = @_;
+    
+    my $text="service $detail->{name} (";
+    $text .= "state $detail->{state} startstop $detail->{startstop} ";
+    $text .= "levels ".join(",", @{$detail->{levels}});
+    $text .= ")";
+    
+    return $text;
+}
+
 
 # Extract the services from BASE and LEGACYBASE
 sub get_quattor_services
@@ -135,8 +152,22 @@ sub get_quattor_services
     
     # will overwrite new ones
     if ($config->elementExists("$BASE/service")) {
-        my $tree = $config->getElement("$BASE/service")->getTree;
+        my $stree = $config->getElement("$BASE/service")->getTree;
+        while (my ($service, $detail) = each %$stree) {
+            # only set the name (not mandatory in new schema, to be added here)
+            $detail->{name} = unescape($service) if (! exists($detail->{name}));
+            
+            if(exists($services{$service})) {
+                $self->verbose("Going to replace legacy service ",
+                               $self->service_text($services{$service}), 
+                               "with new one.");                
+            }
+            $self->verbose("Adding service ",$self->service_text($detail));
+            $services{$service} = $detail;
+        }
     };
+    
+    return %services;
 }
 
 
