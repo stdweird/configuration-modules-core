@@ -13,12 +13,6 @@ $CAF::Object::NoAction = 1;
 my $cfg = get_config_for_profile('simple_legacy_services');
 my $cmp = NCM::Component::chkconfig2->new('chkconfig2');
 
-sub escape {
-  my ($str)=@_;
-  $str =~ s/(^[0-9]|[^a-zA-Z0-9])/sprintf("_%lx", ord($1))/eg;
-  return $str;
-}
-
 
 =head1 Test legacy level conversion
 
@@ -53,10 +47,13 @@ Test legacy service conversion to new schema
 =cut
 
 my %cs = $cmp->get_quattor_legacy_services($cfg);
+
+is(scalar keys %cs, 10, "Found 5+5 legacy services");
+
 my ($name, $svc);
 
 $name = "test_on";
-$svc = $cs{escape($name)};
+$svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"on", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
@@ -64,15 +61,15 @@ ok($svc->{startstop}, "Service $name startstop true");
 is(@{$svc->{levels}}, @levels, "Service $name levels ".join(',', @levels));
 
 $name = "test_add";
-$svc = $cs{escape($name)};
+$svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"add", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
 @levels = ("multi-user");
 is(@{$svc->{levels}}, @levels, "Service $name levels ".join(',', @levels));
 
-$name = "test_on_rename";
-$svc = $cs{escape($name)};
+$name = "othername"; # "test_on_rename";
+$svc = $cs{$name};
 is($svc->{name}, "othername", "Service $name renamed matches");
 is($svc->{state},"on", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
@@ -80,7 +77,7 @@ ok($svc->{startstop}, "Service $name startstop true");
 is(@{$svc->{levels}}, @levels, "Service $name levels ".join(',', @levels));
 
 $name = "test_off";
-$svc = $cs{escape($name)};
+$svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"off", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
@@ -88,7 +85,7 @@ ok($svc->{startstop}, "Service $name startstop true");
 is(@{$svc->{levels}}, @levels, "Service $name levels ".join(',', @levels));
 
 $name = "test_del";
-$svc = $cs{escape($name)};
+$svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"del", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
@@ -96,7 +93,7 @@ ok($svc->{startstop}, "Service $name startstop true");
 is(@{$svc->{levels}}, @levels, "Service $name levels ".join(',', @levels));
 
 $name = "test_on_off";
-$svc = $cs{escape($name)};
+$svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"off", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
@@ -104,7 +101,7 @@ ok($svc->{startstop}, "Service $name startstop true");
 is(@{$svc->{levels}}, @levels, "Service $name levels ".join(',', @levels));
 
 $name = "test_add_on";
-$svc = $cs{escape($name)};
+$svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"on", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
@@ -112,7 +109,7 @@ ok($svc->{startstop}, "Service $name startstop true");
 is(@{$svc->{levels}}, @levels, "Service $name levels ".join(',', @levels));
 
 $name = "test_off_add";
-$svc = $cs{escape($name)};
+$svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"off", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
@@ -120,7 +117,7 @@ ok($svc->{startstop}, "Service $name startstop true");
 is(@{$svc->{levels}}, @levels, "Service $name levels ".join(',', @levels));
 
 $name = "test_del_off_on_add";
-$svc = $cs{escape($name)};
+$svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"del", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
@@ -128,7 +125,7 @@ ok($svc->{startstop}, "Service $name startstop true");
 is(@{$svc->{levels}}, @levels, "Service $name levels ".join(',', @levels));
 
 $name = "default";
-$svc = $cs{escape($name)};
+$svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"on", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");

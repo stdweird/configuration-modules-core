@@ -45,6 +45,26 @@ Readonly my $LEVEL_MULTIUSER => "multi-user";
 Readonly my $LEVEL_GRAPHICAL => "graphical";
 Readonly my $DEFAULT_LEVEL => $LEVEL_MULTIUSER; # default level
 
+Readonly my $TYPE_SYSV => 'sysv';
+Readonly my $TYPE_SERVICE => 'service';
+Readonly my $TYPE_TARGET => 'target';
+
+
+# convert service C<detail> hash to human readable string
+sub service_text
+{
+    my ($self, $detail) = @_;
+    
+    my $text = "service $detail->{name} (";
+    $text .= "state $detail->{state} startstop $detail->{startstop} ";
+    $text .= "type $detail->{type} ";
+    $text .= "levels ".join(",", @{$detail->{levels}});
+    $text .= ")";
+    
+    return $text;
+}
+
+
 
 # Convert the legacy levels to new systemsctl ones
 # C<legacylevel> is a string with integers e.g. "234"
@@ -83,6 +103,9 @@ sub get_quattor_legacy_services
     while (my ($service, $detail) = each %$stree) {
         # fix the details to reflect new schema
         
+        # all legacy types are assumed to be sysv services
+        $detail->{type} = $TYPE_SYSV;
+        
         # set the name (not mandatory in new schema either)
         $detail->{name} = unescape($service) if (! exists($detail->{name}));
 
@@ -109,7 +132,7 @@ sub get_quattor_legacy_services
         $detail->{state} = $state;
 
         my $leveltxt;
-        # off-level precedes on-level (as off state preceds on state)
+        # off-level precedes on-level (as off state precedes on state)
         if(defined($off)) {
             $leveltxt = $off;
         } elsif(defined($on)) {
@@ -120,26 +143,13 @@ sub get_quattor_legacy_services
         # startstop mandatory
         $detail->{startstop} = $DEFAULT_STARTSTOP if (! exists($detail->{startstop}));
 
-        $self->verbose("Add legacy service $service (name $detail->{name})");
-        $services{$service}=$detail;
+        $self->verbose("Add legacy name $detail->{name} (service $service)");
+        $self->debug(1, "Add legacy ", $self->service_text($detail));
+        $services{$detail->{name}} = $detail;
                 
     };
 
     return %services;    
-}
-
-
-# convert service details hash to string
-sub service_text
-{
-    my ($self, $detail) = @_;
-    
-    my $text="service $detail->{name} (";
-    $text .= "state $detail->{state} startstop $detail->{startstop} ";
-    $text .= "levels ".join(",", @{$detail->{levels}});
-    $text .= ")";
-    
-    return $text;
 }
 
 
@@ -156,41 +166,106 @@ sub get_quattor_services
         while (my ($service, $detail) = each %$stree) {
             # only set the name (not mandatory in new schema, to be added here)
             $detail->{name} = unescape($service) if (! exists($detail->{name}));
+
+            # all new services are assumed type service
+            $detail->{type} = $TYPE_SERVICE if (! exists($detail->{type}));
             
-            if(exists($services{$service})) {
+            if(exists($services{$detail->{name}})) {
                 $self->verbose("Going to replace legacy service ",
-                               $self->service_text($services{$service}), 
+                               $self->service_text($services{$detail->{name}}), 
                                "with new one.");                
             }
-            $self->verbose("Adding service ",$self->service_text($detail));
-            $services{$service} = $detail;
+            $self->verbose("Add service name $detail->{name} (service $service)");
+            $self->debug(1, "Add ", $self->service_text($detail));
+
+            $services{$detail->{name}} = $detail;
         }
     };
+
+    # TODO figuire out a way to specify what off-levels and what on-levels mean.
+    # If on is defined, all other levels are off
+    # If off is defined, all others are on or also off? (2nd case: off means off everywhere) 
     
     return %services;
 }
 
 
+# get current configured services via chkconfig --list
+sub get_current_services_hash_chkconfig {
+    my $self = shift;
 
-##########################################################################
-sub Configure {
-##########################################################################
-    my ($self, $config)=@_;
-    my (%configuredservices, @cmdlist, @servicecmdlist, $default);
-
-    my $tree = $config->getElement('/software/components/chkconfig')->getTree;
-
-    if (exists($tree->{default})) {
-        $default = $tree->{default};
+    my %current;
+    my $data = CAF::Process->new([$CHKCONFIG, '--list'], log=>$self)->output();
+    my $ec = $?;
+    if($ec) {
+        $self->error("Cannot get list of current services from $CHKCONFIG: $ec");
+        return;
     } else {
-        $default = 'ignore';
+        foreach my $line (split(/\n/,$data)) {
+            # afs       0:off   1:off   2:off   3:off   4:off   5:off   6:off
+            # ignore the "xinetd based services"
+            if ($line =~ m/^([\w\-]+)\s+((?:[0-6]:(?:on|off)(?:\s+|\s*$)){7})/) {
+                my ($servicename, $levels) = ($1,$2);
+                my $detail = { name => $servicename, type => $TYPE_SYSV, startstop => $DEFAULT_STARTSTOP};
+
+                if ($levels =~ m/[0-6]:on/) {
+                    my $onlevels = $self->convert_legacy_levels(join('', $levels =~ /([0-6]):on/g));
+                    $detail->{state} = "on";
+                    $detail->{levels} = $onlevels;    
+                } else {
+                    my $offlevels = $self->convert_legacy_levels(join('', $levels =~ /([0-6]):off/g));
+                    $detail->{state} = "off";
+                    $detail->{levels} = $offlevels;    
+                }
+                
+                $self->verbose("Add chkconfig service $detail->{name}");
+                $self->debug(1, "Add chkconfig ", $self->service_text($detail));
+                $current{$servicename} = $detail;
+            }
+        }
     }
+    return %current;
+}
+
+# see what is currently configured in terms of services
+sub get_current_services_hash {
+    my $self = shift;
+    my %current;
+    my $data = CAF::Process->new([$CHKCONFIG, '--list'],log=>$self)->output();
+
+    if($?) {
+        $self->error("Cannot get list of current services from $CHKCONFIG: $!");
+        return;
+    } else {
+        foreach my $line (split(/\n/,$data)) {
+            # afs       0:off   1:off   2:off   3:off   4:off   5:off   6:off
+            # ignore the "xinetd based services"
+            if ($line =~ m/^([\w\-]+)\s+0:(\w+)\s+1:(\w+)\s+2:(\w+)\s+3:(\w+)\s+4:(\w+)\s+5:(\w+)\s+6:(\w+)\s*$/) {
+                $current{$1} = [$2,$3,$4,$5,$6,$7,$8];
+            }
+            #if ($line =~ m/^([\w\-]+)\s+((?:[0-6]:(?:on|off)(?:\s+|\s*$)){7})/) {
+            if ($line =~ m/^([\w\-]+)\s+0:(\w+)/) {
+                $current{"$1.new"} = $2;
+            }
+        }
+    }
+    return %current;
+}
+
+
+
+sub Configure {
+    my ($self, $config)=@_;
+
+    my $default = $config->getValue("$BASE/default");
     $self->info("Default setting for non-specified services: $default");
 
     my %currentservices = $self->get_current_services_hash();
 
     my $currentrunlevel = $self->getcurrentrunlevel();
 
+    my (%configuredservices, @cmdlist, @servicecmdlist, $default);
+    my $tree = $config->getElement('/software/components/chkconfig')->getTree;
     while(my ($escservice, $detail) = each %{$tree->{service}}) {
         my ($service, $startstop);
 
@@ -555,29 +630,6 @@ sub getcurrentrunlevel {
         $self->warn("No way to determine current runlevel, assuming $level");
     }
     return $level;
-}
-
-##########################################################################
-# see what is currently configured in terms of services
-sub get_current_services_hash {
-##########################################################################
-    my $self = shift;
-    my %current;
-    my $data = CAF::Process->new([$CHKCONFIG, '--list'],log=>$self)->output();
-
-    if($?) {
-        $self->error("Cannot get list of current services from $CHKCONFIG: $!");
-        return;
-    } else {
-        foreach my $line (split(/\n/,$data)) {
-            # afs       0:off   1:off   2:off   3:off   4:off   5:off   6:off
-            # ignore the "xinetd based services"
-            if ($line =~ m/^([\w\-]+)\s+0:(\w+)\s+1:(\w+)\s+2:(\w+)\s+3:(\w+)\s+4:(\w+)\s+5:(\w+)\s+6:(\w+)/) {
-                $current{$1} = [$2,$3,$4,$5,$6,$7,$8];
-            }
-        }
-    }
-    return %current;
 }
 
 ##########################################################################
