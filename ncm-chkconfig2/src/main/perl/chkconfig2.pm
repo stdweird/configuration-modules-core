@@ -31,7 +31,7 @@ Readonly::Hash my %DEFAULT_PROTECTED_SERVICES => (
 
 Readonly my $CHKCONFIG => "/sbin/chkconfig";
 Readonly my $SERVICE => "/sbin/service";
-Readonly my $SYSTEMCTL => "/bin/systemctl";
+Readonly my $SYSTEMCTL => "/usr/bin/systemctl";
 
 Readonly my $BASE => "/software/components/${project.artifactId}";
 Readonly my $LEGACY_BASE => "/software/components/chkconfig";
@@ -40,10 +40,11 @@ Readonly my $LEGACY_BASE => "/software/components/chkconfig";
 Readonly my $DEFAULT_STARTSTOP => 1; # startstop true by default
 Readonly my $DEFAULT_STATE => "on"; # state on by default
 
-Readonly my $LEVEL_RESCUE => "rescue";
-Readonly my $LEVEL_MULTIUSER => "multi-user";
-Readonly my $LEVEL_GRAPHICAL => "graphical";
-Readonly my $DEFAULT_LEVEL => $LEVEL_MULTIUSER; # default level
+Readonly my $TARGET_DEFAULT => "default";
+Readonly my $TARGET_RESCUE => "rescue";
+Readonly my $TARGET_MULTIUSER => "multi-user";
+Readonly my $TARGET_GRAPHICAL => "graphical";
+Readonly my $DEFAULT_TARGET => $TARGET_MULTIUSER; # default level
 
 Readonly my $TYPE_SYSV => 'sysv';
 Readonly my $TYPE_SERVICE => 'service';
@@ -58,7 +59,7 @@ sub service_text
     my $text = "service $detail->{name} (";
     $text .= "state $detail->{state} startstop $detail->{startstop} ";
     $text .= "type $detail->{type} ";
-    $text .= "levels ".join(",", @{$detail->{levels}});
+    $text .= "targets ".join(",", @{$detail->{targets}});
     $text .= ")";
     
     return $text;
@@ -66,27 +67,27 @@ sub service_text
 
 
 
-# Convert the legacy levels to new systemsctl ones
+# Convert the legacy levels to new systemsctl targets
 # C<legacylevel> is a string with integers e.g. "234"
 sub convert_legacy_levels 
 {
     my ($self, $legacylevel) = @_;
     # only keep the relevant ones
-    my @levels;
+    my @targets;
     # ignore 1 and 6
-    push(@levels, $LEVEL_RESCUE) if ($legacylevel =~ m/(1)/);    
-    push(@levels, $LEVEL_MULTIUSER) if ($legacylevel =~ m/(2|3|4)/);    
-    push(@levels, $LEVEL_GRAPHICAL) if ($legacylevel =~ m/(5)/);    
+    push(@targets, $TARGET_RESCUE) if ($legacylevel =~ m/(1)/);    
+    push(@targets, $TARGET_MULTIUSER) if ($legacylevel =~ m/(2|3|4)/);    
+    push(@targets, $TARGET_GRAPHICAL) if ($legacylevel =~ m/(5)/);    
     
-    if (! scalar @levels) {
+    if (! scalar @targets) {
         if ($legacylevel) {
-            $self->warn("legacylevel set to $legacylevel, but not converted in new levels. Using default one.");
+            $self->warn("legacylevel set to $legacylevel, but not converted in new targets. Using default one.");
         }
-        push(@levels, $DEFAULT_LEVEL);
+        push(@targets, $DEFAULT_TARGET);
     };    
     
-    $self->verbose("Converted legacylevel '$legacylevel' in ".join(', ', @levels));
-    return \@levels;
+    $self->verbose("Converted legacylevel '$legacylevel' in ".join(', ', @targets));
+    return \@targets;
 }
 
 
@@ -138,7 +139,7 @@ sub get_quattor_legacy_services
         } elsif(defined($on)) {
             $leveltxt = $on;
         }
-        $detail->{levels} = $self->convert_legacy_levels($leveltxt);
+        $detail->{targets} = $self->convert_legacy_levels($leveltxt);
         
         # startstop mandatory
         $detail->{startstop} = $DEFAULT_STARTSTOP if (! exists($detail->{startstop}));
@@ -182,8 +183,8 @@ sub get_quattor_services
         }
     };
 
-    # TODO figuire out a way to specify what off-levels and what on-levels mean.
-    # If on is defined, all other levels are off
+    # TODO figuire out a way to specify what off-targets and what on-targets mean.
+    # If on is defined, all other targets are off
     # If off is defined, all others are on or also off? (2nd case: off means off everywhere) 
     
     return %services;
@@ -198,34 +199,73 @@ sub get_current_services_hash_chkconfig {
     my $data = CAF::Process->new([$CHKCONFIG, '--list'], log=>$self)->output();
     my $ec = $?;
     if($ec) {
-        $self->error("Cannot get list of current services from $CHKCONFIG: $ec");
+        $self->error("Cannot get list of current services from $CHKCONFIG: ec $ec ($data)");
         return;
-    } else {
-        foreach my $line (split(/\n/,$data)) {
-            # afs       0:off   1:off   2:off   3:off   4:off   5:off   6:off
-            # ignore the "xinetd based services"
-            if ($line =~ m/^([\w\-]+)\s+((?:[0-6]:(?:on|off)(?:\s+|\s*$)){7})/) {
-                my ($servicename, $levels) = ($1,$2);
-                my $detail = { name => $servicename, type => $TYPE_SYSV, startstop => $DEFAULT_STARTSTOP};
+    }
 
-                if ($levels =~ m/[0-6]:on/) {
-                    my $onlevels = $self->convert_legacy_levels(join('', $levels =~ /([0-6]):on/g));
-                    $detail->{state} = "on";
-                    $detail->{levels} = $onlevels;    
-                } else {
-                    my $offlevels = $self->convert_legacy_levels(join('', $levels =~ /([0-6]):off/g));
-                    $detail->{state} = "off";
-                    $detail->{levels} = $offlevels;    
-                }
-                
-                $self->verbose("Add chkconfig service $detail->{name}");
-                $self->debug(1, "Add chkconfig ", $self->service_text($detail));
-                $current{$servicename} = $detail;
+    foreach my $line (split(/\n/,$data)) {
+        # afs       0:off   1:off   2:off   3:off   4:off   5:off   6:off
+        # ignore the "xinetd based services"
+        if ($line =~ m/^([\w\-]+)\s+((?:[0-6]:(?:on|off)(?:\s+|\s*$)){7})/) {
+            my ($servicename, $levels) = ($1,$2);
+            my $detail = { name => $servicename, type => $TYPE_SYSV, startstop => $DEFAULT_STARTSTOP};
+
+            if ($levels =~ m/[0-6]:on/) {
+                my $ontargets = $self->convert_legacy_levels(join('', $levels =~ /([0-6]):on/g));
+                $detail->{state} = "on";
+                $detail->{targets} = $ontargets;    
+            } else {
+                my $offtargets = $self->convert_legacy_levels(join('', $levels =~ /([0-6]):off/g));
+                $detail->{state} = "off";
+                $detail->{targets} = $offtargets;    
             }
+            
+            $self->verbose("Add chkconfig service $detail->{name}");
+            $self->debug(1, "Add chkconfig ", $self->service_text($detail));
+            $current{$servicename} = $detail;
         }
     }
     return %current;
 }
+
+
+# get current configured services via systemctl list-unit-files
+# specify C<type> (eg service or target; not sysv as those have no unit files)
+sub get_current_services_hash_systemctl {
+    my ($self, $type) = @_;
+
+    my $treg = '^('.join('|', $TYPE_SERVICE, $TYPE_TARGET).')$';
+    if (!($type && $type =~ m/$treg/)) {
+        $self->error("Undefined or wrong type $type for systemctl list-unit-files");
+        return;
+    }
+    
+    my %current;
+    my $data = CAF::Process->new([$SYSTEMCTL, 'list-unit-files', '--all', '--no-pager', '--no-legend', '--type', $type], log=>$self)->output();
+    my $ec = $?;
+
+    if($ec) {
+        $self->error("Cannot get list of current unit files for type $type from $SYSTEMCTL: ec $ec ($data)");
+        return;
+    }
+    
+    my $reg = '^(\s*\S+)\.'.$type.'\s+(\w+)\s*$';
+    foreach my $line (split(/\n/,$data)) {
+        if ($line =~ m/$reg/) {
+            my ($servicename, $state) = ($1,$2);
+            my $detail = { name => $servicename, type => $type, startstop => $DEFAULT_STARTSTOP};
+
+            # TODO which level? lookup via status
+            $detail->{targets} = [];
+            
+            $self->verbose("Add chkconfig service $detail->{name}");
+            $self->debug(1, "Add chkconfig ", $self->service_text($detail));
+            $current{$servicename} = $detail;
+        }
+    }
+    return %current;
+
+};
 
 # see what is currently configured in terms of services
 sub get_current_services_hash {

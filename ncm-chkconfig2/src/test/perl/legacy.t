@@ -26,18 +26,18 @@ is(@{$cmp->convert_legacy_levels('')}, @mu, "Test empty-string legacy level retu
 is(@{$cmp->convert_legacy_levels('0')}, @mu, "Test unsupported shutdown legacy level returns default multi-user");
 is(@{$cmp->convert_legacy_levels('6')}, @mu, "Test unsupported reboot legacy level returns default multi-user");
 
-my @levels;
-@levels = ("rescue");
-is(@{$cmp->convert_legacy_levels('1')}, @levels, "Test 1 legacy level returns secure");
+my @targets;
+@targets = ("rescue");
+is(@{$cmp->convert_legacy_levels('1')}, @targets, "Test 1 legacy level returns secure");
 
-@levels = ("multi-user");
-is(@{$cmp->convert_legacy_levels('234')}, @levels, "Test 234 legacy level returns multi-user");
+@targets = ("multi-user");
+is(@{$cmp->convert_legacy_levels('234')}, @targets, "Test 234 legacy level returns multi-user");
 
-@levels = ("graphical");
-is(@{$cmp->convert_legacy_levels('5')}, @levels, "Test 5 legacy level returns graphical");
+@targets = ("graphical");
+is(@{$cmp->convert_legacy_levels('5')}, @targets, "Test 5 legacy level returns graphical");
 
-@levels = ("rescue", "multi-user", "graphical");
-is(@{$cmp->convert_legacy_levels('0123456')}, @levels, "Test 012345 legacy level returns resuce,multi-user,graphical");
+@targets = ("rescue", "multi-user", "graphical");
+is(@{$cmp->convert_legacy_levels('0123456')}, @targets, "Test 012345 legacy level returns resuce,multi-user,graphical");
 
 
 =head1 Test legacy service conversion
@@ -57,80 +57,80 @@ $svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"on", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@levels = ("rescue", "multi-user");
-is(@{$svc->{levels}}, @levels, "Service $name levels ".join(',', @levels));
+@targets = ("rescue", "multi-user");
+is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
 
 $name = "test_add";
 $svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"add", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@levels = ("multi-user");
-is(@{$svc->{levels}}, @levels, "Service $name levels ".join(',', @levels));
+@targets = ("multi-user");
+is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
 
 $name = "othername"; # "test_on_rename";
 $svc = $cs{$name};
 is($svc->{name}, "othername", "Service $name renamed matches");
 is($svc->{state},"on", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@levels = ("multi-user");
-is(@{$svc->{levels}}, @levels, "Service $name levels ".join(',', @levels));
+@targets = ("multi-user");
+is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
 
 $name = "test_off";
 $svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"off", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@levels = ("multi-user", "graphical");
-is(@{$svc->{levels}}, @levels, "Service $name levels ".join(',', @levels));
+@targets = ("multi-user", "graphical");
+is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
 
 $name = "test_del";
 $svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"del", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@levels = ("multi-user");
-is(@{$svc->{levels}}, @levels, "Service $name levels ".join(',', @levels));
+@targets = ("multi-user");
+is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
 
 $name = "test_on_off";
 $svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"off", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@levels = ("multi-user", "graphical"); # off wins
-is(@{$svc->{levels}}, @levels, "Service $name levels ".join(',', @levels));
+@targets = ("multi-user", "graphical"); # off wins
+is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
 
 $name = "test_add_on";
 $svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"on", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@levels = ("multi-user"); 
-is(@{$svc->{levels}}, @levels, "Service $name levels ".join(',', @levels));
+@targets = ("multi-user"); 
+is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
 
 $name = "test_off_add";
 $svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"off", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@levels = ("multi-user", "graphical"); 
-is(@{$svc->{levels}}, @levels, "Service $name levels ".join(',', @levels));
+@targets = ("multi-user", "graphical"); 
+is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
 
 $name = "test_del_off_on_add";
 $svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"del", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@levels = ("multi-user", "graphical");
-is(@{$svc->{levels}}, @levels, "Service $name levels ".join(',', @levels));
+@targets = ("multi-user", "graphical");
+is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
 
 $name = "default";
 $svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"on", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@levels = ("multi-user");
-is(@{$svc->{levels}}, @levels, "Service $name levels ".join(',', @levels));
+@targets = ("multi-user");
+is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
 
 
 
