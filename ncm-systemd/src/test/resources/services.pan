@@ -1,6 +1,6 @@
 unique template services;
 
-prefix "/software/components/chkconfig2/service";
+prefix "/software/components/systemd/service";
 
 "{test2_on}" = nlist("state", "on", "targets", list("rescue", "multi-user"), "startstop", true);
 "{test2_add}" = nlist("state","add", "targets", list("multi-user"), "startstop", true, "type", "target");

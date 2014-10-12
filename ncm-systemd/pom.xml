@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>org.quattor.cfg.module</groupId>
-  <artifactId>chkconfig2</artifactId>
+  <artifactId>systemd</artifactId>
 
   <packaging>pom</packaging>
   <version>14.8.1-SNAPSHOT</version>

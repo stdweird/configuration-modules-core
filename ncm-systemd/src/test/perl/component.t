@@ -4,7 +4,7 @@ use warnings;
 use Test::More;
 use CAF::Object;
 use Test::Quattor qw(simple_services);
-use NCM::Component::chkconfig2;
+use NCM::Component::systemd;
 use Readonly;
 
 $CAF::Object::NoAction = 1;
@@ -29,7 +29,7 @@ set_desired_output("/sbin/chkconfig --list", $CHKCONFIG_LIST_OUTPUT);
 set_desired_output("/sbin/runlevel","N 5");
 
 my $cfg = get_config_for_profile('simple_services');
-my $cmp = NCM::Component::chkconfig2->new('chkconfig2');
+my $cmp = NCM::Component::systemd->new('systemd');
 
 is($cmp->Configure($cfg), 1, "Component runs correctly with a test profile");
 

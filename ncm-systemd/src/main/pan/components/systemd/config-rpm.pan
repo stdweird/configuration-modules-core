@@ -2,14 +2,6 @@
 # ${developer-info}
 # ${author-info}
 
-############################################################
-#
-# type definition components/${project.artifactId}
-#
-#
-#
-############################################################
- 
 unique template components/${project.artifactId}/config-rpm;
 include { 'components/${project.artifactId}/schema' };
 

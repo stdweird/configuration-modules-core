@@ -11,3 +11,5 @@ unique template components/${project.artifactId}/migrate;
 # disable chkconfig
 "/software/components/chkconfig/active" = false;
  
+# TODO fix dependencies
+"/" = {error('fix deps')};

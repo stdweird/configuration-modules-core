@@ -687,6 +687,3 @@ sub run_and_warn {
 
 1; #required for Perl modules
 
-### Local Variables: ///
-### mode: perl ///
-### End: ///

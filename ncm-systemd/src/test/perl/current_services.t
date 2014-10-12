@@ -4,13 +4,13 @@ use warnings;
 use Test::More;
 use CAF::Object;
 use Test::Quattor;
-use NCM::Component::chkconfig2;
+use NCM::Component::systemd;
 use Readonly;
 
 use helper;
 
 $CAF::Object::NoAction = 1;
-my $cmp = NCM::Component::chkconfig2->new('chkconfig2');
+my $cmp = NCM::Component::systemd->new('systemd');
 
 =pod
 

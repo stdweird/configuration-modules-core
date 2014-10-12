@@ -5,13 +5,13 @@ use Test::More;
 use CAF::Object;
 use Test::Quattor qw(simple_legacy_services);
 use NCM::Component;
-use NCM::Component::chkconfig2;
+use NCM::Component::systemd;
 use Readonly;
 
 $CAF::Object::NoAction = 1;
 
 my $cfg = get_config_for_profile('simple_legacy_services');
-my $cmp = NCM::Component::chkconfig2->new('chkconfig2');
+my $cmp = NCM::Component::systemd->new('systemd');
 
 
 =head1 Test legacy level conversion
