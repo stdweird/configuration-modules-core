@@ -3,14 +3,14 @@ use strict;
 use warnings;
 use Test::More;
 use CAF::Object;
-use Test::Quattor qw(service_details);
+use Test::Quattor qw(service-service_details);
 use NCM::Component;
 use NCM::Component::systemd;
 use Readonly;
 
 $CAF::Object::NoAction = 1;
 
-my $cfg = get_config_for_profile('service_details');
+my $cfg = get_config_for_profile('service-service_details');
 my $cmp = NCM::Component::systemd->new('systemd');
 
 =head1 Test quattor service details 
@@ -19,7 +19,7 @@ Test the gathering of the service details of legacy and new style
 
 =cut
 
-my %cs = $cmp->get_quattor_services($cfg);
+my %cs = $cmp->service_get_quattor_services($cfg);
 
 is(scalar keys %cs, 8, "Found 8 services in quattor (3 legacy, 3 new, 2 legacy redefined)");
 

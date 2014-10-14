@@ -1,5 +1,5 @@
-object template service_details;
+object template service-service_details;
 
-include 'legacy_services';
+include 'service-legacy_services';
 
-include 'services';
+include 'service-services';

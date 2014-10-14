@@ -3,41 +3,15 @@ use strict;
 use warnings;
 use Test::More;
 use CAF::Object;
-use Test::Quattor qw(simple_legacy_services);
+use Test::Quattor qw(service-simple_legacy_services);
 use NCM::Component;
 use NCM::Component::systemd;
 use Readonly;
 
 $CAF::Object::NoAction = 1;
 
-my $cfg = get_config_for_profile('simple_legacy_services');
+my $cfg = get_config_for_profile('service-simple_legacy_services');
 my $cmp = NCM::Component::systemd->new('systemd');
-
-
-=head1 Test legacy level conversion
-
-Test legacy level conversion
-
-=cut
-
-my @mu = ("multi-user");
-is(@{$cmp->convert_legacy_levels()}, @mu, "Test undefined legacy level returns default multi-user");
-is(@{$cmp->convert_legacy_levels('')}, @mu, "Test empty-string legacy level returns default multi-user");
-is(@{$cmp->convert_legacy_levels('0')}, @mu, "Test unsupported shutdown legacy level returns default multi-user");
-is(@{$cmp->convert_legacy_levels('6')}, @mu, "Test unsupported reboot legacy level returns default multi-user");
-
-my @targets;
-@targets = ("rescue");
-is(@{$cmp->convert_legacy_levels('1')}, @targets, "Test 1 legacy level returns secure");
-
-@targets = ("multi-user");
-is(@{$cmp->convert_legacy_levels('234')}, @targets, "Test 234 legacy level returns multi-user");
-
-@targets = ("graphical");
-is(@{$cmp->convert_legacy_levels('5')}, @targets, "Test 5 legacy level returns graphical");
-
-@targets = ("rescue", "multi-user", "graphical");
-is(@{$cmp->convert_legacy_levels('0123456')}, @targets, "Test 012345 legacy level returns resuce,multi-user,graphical");
 
 
 =head1 Test legacy service conversion
@@ -46,7 +20,7 @@ Test legacy service conversion to new schema
 
 =cut
 
-my %cs = $cmp->get_quattor_legacy_services($cfg);
+my %cs = $cmp->service_get_quattor_legacy_services($cfg);
 
 is(scalar keys %cs, 10, "Found 5+5 legacy services");
 
@@ -132,6 +106,47 @@ ok($svc->{startstop}, "Service $name startstop true");
 @targets = ("multi-user");
 is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
 
+
+=head1 Test legacy configure 
+
+Test legacy configure
+
+=cut
+
+my $cmd;
+
+## TODO put here to fail
+set_output("runlevel_5");
+set_output("chkconfig_list_test");
+is($cmp->service_configure, 1, "Configure service runs ok");
+
+# service add (test_add also tests unescaping of getTree)
+# test_add should not exist in $chkconfig_list_output
+$cmd = get_command("/sbin/chkconfig --add test_add")->{object};
+isa_ok($cmd, "CAF::Process", "Command for service --add test_add run");
+
+# service on
+$cmd = get_command("/sbin/chkconfig test_on off")->{object};
+isa_ok($cmd, "CAF::Process", "Command for service test_on on (off first) run");
+$cmd = get_command("/sbin/chkconfig --level 123 test_on on")->{object};
+isa_ok($cmd, "CAF::Process", "Command for service test_on on run");
+
+# service on with renamed service
+$cmd = get_command("/sbin/chkconfig othername off")->{object};
+isa_ok($cmd, "CAF::Process", "Command for service test_on_rename on (off first) run");
+$cmd = get_command("/sbin/chkconfig --level 4 othername on")->{object};
+isa_ok($cmd, "CAF::Process", "Command for service test_on_rename on run");
+
+
+# to test del and/or off, the service needs to be there and
+# turned on for at least one of the selected runlevels.
+$cmd = get_command("/sbin/chkconfig --level 45 test_off off")->{object};
+isa_ok($cmd, "CAF::Process", "Command for service test_off off run");
+
+$cmd = get_command("/sbin/chkconfig test_del off")->{object};
+isa_ok($cmd, "CAF::Process", "Command for service --del test_del (off first) run");
+$cmd = get_command("/sbin/chkconfig --del test_del")->{object};
+isa_ok($cmd, "CAF::Process", "Command for service --del test_del run");
 
 
 done_testing();

@@ -1,6 +1,6 @@
-object template simple_legacy_services;
+object template service-simple_legacy_services;
 
-include 'legacy_services';
+include 'service-legacy_services';
 
 prefix "/software/components/chkconfig/service";
 

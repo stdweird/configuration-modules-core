@@ -1,4 +1,4 @@
-unique template services;
+unique template service-services;
 
 prefix "/software/components/systemd/service";
 

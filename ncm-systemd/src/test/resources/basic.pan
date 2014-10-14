@@ -1,4 +1,6 @@
-object template service-simple_services;
+object template basic;
+
+# Test the whole Config using this template
 
 "/software/components/systemd/default" = "ignore";
 
