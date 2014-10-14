@@ -1,0 +1,18 @@
+# ${license-info}
+# ${developer-info}
+# ${author-info}
+# ${build-info}
+
+=head1 NAME
+
+${project.artifactId}::Service  Service configuration sub-module for systemd
+
+=head1 DESCRIPTION
+
+Service configuration submodule for systemd
+
+=head1 AUTHOR
+
+${author-info}
+
+=cut
