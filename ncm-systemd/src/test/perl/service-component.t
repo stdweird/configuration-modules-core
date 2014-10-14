@@ -27,7 +27,7 @@ $res=$cmp->service_systemctl_show('runlevel6.target');
 
 is(scalar keys %$res, 63, "Found 63 keys");
 is($res->{Id}, 'reboot.target', "Runlevel6 is reboot.target");
-@names=("runlevel6.target", "reboot.target");
-is(@{$res->{Names}}, @names, "Runlevel6 names/aliases are ".join(',', @names));
+
+is_deeply($res->{Names}, ["runlevel6.target", "reboot.target"], "Runlevel6 names/aliases");
 
 done_testing();

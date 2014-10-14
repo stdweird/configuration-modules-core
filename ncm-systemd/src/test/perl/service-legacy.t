@@ -7,6 +7,7 @@ use Test::Quattor qw(service-simple_legacy_services);
 use NCM::Component;
 use NCM::Component::systemd;
 use Readonly;
+use helper;
 
 $CAF::Object::NoAction = 1;
 
@@ -31,80 +32,71 @@ $svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"on", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("rescue", "multi-user");
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
+is_deeply($svc->{targets}, ["rescue", "multi-user"], "Service $name targets");
 
 $name = "test_add";
 $svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"add", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("multi-user");
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
+is_deeply($svc->{targets}, ["multi-user"], "Service $name targets");
 
 $name = "othername"; # "test_on_rename";
 $svc = $cs{$name};
 is($svc->{name}, "othername", "Service $name renamed matches");
 is($svc->{state},"on", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("multi-user");
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
+is_deeply($svc->{targets}, ["multi-user"], "Service $name targets");
 
 $name = "test_off";
 $svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"off", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("multi-user", "graphical");
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
+is_deeply($svc->{targets}, ["multi-user", "graphical"], "Service $name targets");
 
 $name = "test_del";
 $svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"del", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("multi-user");
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
+is_deeply($svc->{targets}, ["multi-user"], "Service $name targets");
 
 $name = "test_on_off";
 $svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"off", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("multi-user", "graphical"); # off wins
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
+# off wins
+is_deeply($svc->{targets}, ["multi-user", "graphical"], "Service $name targets");
 
 $name = "test_add_on";
 $svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"on", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("multi-user"); 
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
+is_deeply($svc->{targets}, ["multi-user"], "Service $name targets");
 
 $name = "test_off_add";
 $svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"off", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("multi-user", "graphical"); 
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
+is_deeply($svc->{targets}, ["multi-user", "graphical"], "Service $name targets");
 
 $name = "test_del_off_on_add";
 $svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"del", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("multi-user", "graphical");
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
+is_deeply($svc->{targets}, ["multi-user", "graphical"], "Service $name targets");
 
 $name = "default";
 $svc = $cs{$name};
 is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"on", "Service $name state on");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("multi-user");
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
+is_deeply($svc->{targets}, ["multi-user"], "Service $name targets");
 
 
 =head1 Test legacy configure 

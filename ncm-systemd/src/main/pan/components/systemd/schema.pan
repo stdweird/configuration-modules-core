@@ -10,7 +10,7 @@ include 'quattor/schema';
 # 1->rescue
 # 234 -> multi-user
 # 5 -> graphical
-type ${project.artifactId}_target = string with match(SELF, "^(default|rescue|multi-user|graphical)$");
+type ${project.artifactId}_target = string with match(SELF, "^(default|poweroff|secure|multi-user|graphical|reboot|rescue)$");
 
 type ${project.artifactId}_service_type = {
     "name" ? string

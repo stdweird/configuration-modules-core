@@ -59,43 +59,59 @@ $supp_exe = '';
 set_file('inittab_el7');
 is($cmp->service_get_current_runlevel(), $cmp->service_get_default_runlevel(), "Return runlevel 3 from default runlevel");
 
-=head1 Test legacy level conversion
+=head1 Test legacy level map generation
 
-Test legacy level conversion
+Test legacy level map generation
 
 =cut
 
-my @targets;
-
-set_desired_output("/usr/bin/systemctl --no-pager --all show runlevel0","Id=poweroff");
+set_desired_output("/usr/bin/systemctl --no-pager --all show runlevel0.target","Id=poweroff.target");
+is($cmp->service_systemctl_show("runlevel0.target")->{Id}, "poweroff.target", "target Id level 0 poweroff.target");
 # imaginary mapping
 foreach my $lvl (1..5) {
-    set_desired_output("/usr/bin/systemctl --no-pager --all show runlevel$lvl","Id=x$lvl");
+    set_desired_output("/usr/bin/systemctl --no-pager --all show runlevel$lvl.target","Id=x$lvl.target");
+    is($cmp->service_systemctl_show("runlevel$lvl.target")->{Id}, "x$lvl.target", "target Id level $lvl x$lvl.target");
 }
 # broken
-set_desired_output("/usr/bin/systemctl --no-pager --all show runlevel6","Noid=false");
-@targets = ("poweroff", "x1", "x2", "x3", "x4", "x5", "reboot");
-is(@{$cmp->_generate_level2target()}, @targets, "Generated level2target arraymap");
+set_desired_output("/usr/bin/systemctl --no-pager --all show runlevel6.target","Noid=false");
+ok(!defined($cmp->service_systemctl_show("runlevel6.target")->{Id}), "target Id runlevel6 undefined");
 
-my @mu = ("multi-user");
-is(@{$cmp->service_convert_legacy_levels()}, @mu, "Test undefined legacy level returns default multi-user");
-is(@{$cmp->service_convert_legacy_levels('')}, @mu, "Test empty-string legacy level returns default multi-user");
-is(@{$cmp->service_convert_legacy_levels('0')}, @mu, "Test unsupported shutdown legacy level returns default multi-user");
-is(@{$cmp->service_convert_legacy_levels('6')}, @mu, "Test unsupported reboot legacy level returns default multi-user");
-
-@targets = ("rescue");
-is(@{$cmp->service_convert_legacy_levels('1')}, @targets, "Test 1 legacy level returns secure");
-
-@targets = ("multi-user");
-is(@{$cmp->service_convert_legacy_levels('234')}, @targets, "Test 234 legacy level returns multi-user");
-
-@targets = ("graphical");
-is(@{$cmp->service_convert_legacy_levels('5')}, @targets, "Test 5 legacy level returns graphical");
-
-@targets = ("rescue", "multi-user", "graphical");
-is(@{$cmp->service_convert_legacy_levels('0123456')}, @targets, "Test 012345 legacy level returns resuce,multi-user,graphical");
+is_deeply($cmp->_generate_level2target(), ["poweroff", "x1", "x2", "x3", "x4", "x5", "reboot"], "Generated level2target arraymap");
 
 
+=head1 Test legacy level conversion 
+
+Test legacy level conversion arbitrary and realistic
+
+=cut
+
+is_deeply($cmp->service_convert_legacy_levels(), ["multi-user"], "Test undefined legacy level returns default multi-user");
+is_deeply($cmp->service_convert_legacy_levels(''), ["multi-user"], "Test empty-string legacy level returns default multi-user");
+
+# fake/partial fake
+is_deeply($cmp->service_convert_legacy_levels('0'), ["poweroff"], "Test shutdown legacy level returns poweroff");
+is_deeply($cmp->service_convert_legacy_levels('1'), ["x1"], "Test 1 legacy level returns fake x1");
+is_deeply($cmp->service_convert_legacy_levels('234'), ["x2", "x3", "x4"], "Test 234 legacy level returns fake x2,x3,x4");
+is_deeply($cmp->service_convert_legacy_levels('5'), ["x5"], "Test 5 legacy level returns fake x5");
+is_deeply($cmp->service_convert_legacy_levels('6'), ["reboot"], "Test reboot legacy level returns default reboot");
+
+is_deeply($cmp->service_convert_legacy_levels('0123456'), ["poweroff", "x1", "x2", "x3", "x4", "x5", "reboot"], "Test 012345 legacy level with fake data");
+
+# realistic tests
+my $res = ["poweroff", "rescue", "multi-user", "multi-user", "multi-user", "graphical", "reboot"];
+foreach my $lvl (0..6) {
+    set_output("systemctl_show_runlevel${lvl}_target_el7");
+    is($cmp->service_systemctl_show("runlevel${lvl}.target")->{Id}, $res->[$lvl].".target", "target Id level $lvl ".$res->[$lvl]);
+}
+# regenerate cache
+is_deeply($cmp->_generate_level2target(), $res, "Regenerated level2target arraymap");
+
+is_deeply($cmp->service_convert_legacy_levels('0'), ["poweroff"], "Test shutdown legacy level returns poweroff");
+is_deeply($cmp->service_convert_legacy_levels('1'), ["rescue"], "Test 1 legacy level returns rescue");
+is_deeply($cmp->service_convert_legacy_levels('234'), ["multi-user"], "Test 234 legacy level returns multi-user");
+is_deeply($cmp->service_convert_legacy_levels('5'), ["graphical"], "Test 5 legacy level returns graphical");
+is_deeply($cmp->service_convert_legacy_levels('6'), ["reboot"], "Test reboot legacy level returns reboot");
+is_deeply($cmp->service_convert_legacy_levels('0123456'), ["poweroff", "rescue", "multi-user", "graphical", "reboot"], "Test 012345 legacy level returns poweroff,resuce,multi-user,graphical,reboot");
 
 
 done_testing();

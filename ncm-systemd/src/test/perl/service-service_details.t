@@ -33,8 +33,7 @@ is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"on", "Service $name state on");
 is($svc->{type}, "sysv", "Service $name type sysv");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("rescue", "multi-user");
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
+is_deeply($svc->{targets}, ["rescue", "multi-user"], "Service $name targets");
 
 $name = "test_add";
 $svc = $cs{$name};
@@ -42,8 +41,7 @@ is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"add", "Service $name state on");
 is($svc->{type}, "sysv", "Service $name type sysv");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("multi-user");
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
+is_deeply($svc->{targets}, ["multi-user"], "Service $name targets");
 
 $name = "othername"; # test_on_rename
 $svc = $cs{$name};
@@ -51,8 +49,7 @@ is($svc->{name}, "othername", "Service $name renamed matches");
 is($svc->{state},"on", "Service $name state on");
 is($svc->{type}, "sysv", "Service $name type sysv");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("multi-user");
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
+is_deeply($svc->{targets}, ["multi-user"], "Service $name targets");
 
 # new ones
 
@@ -62,8 +59,7 @@ is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"on", "Service $name state on");
 is($svc->{type}, "service", "Service $name type sysv");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("rescue", "multi-user");
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
+is_deeply($svc->{targets}, ["rescue", "multi-user"], "Service $name targets");
 
 $name = "test2_add";
 $svc = $cs{$name};
@@ -71,8 +67,7 @@ is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"add", "Service $name state on");
 is($svc->{type}, "target", "Service $name type sysv");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("multi-user");
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
+is_deeply($svc->{targets}, ["multi-user"], "Service $name targets");
 
 $name = "othername2"; # "test2_on_rename"
 $svc = $cs{$name};
@@ -80,9 +75,7 @@ is($svc->{name}, "othername2", "Service $name renamed matches");
 is($svc->{state},"on", "Service $name state on");
 is($svc->{type}, "service", "Service $name type sysv");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("multi-user");
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
-
+is_deeply($svc->{targets}, ["multi-user"], "Service $name targets");
 
 # redefined in new
 
@@ -92,8 +85,7 @@ is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"del", "Service $name state on");
 is($svc->{type}, "service", "Service $name type sysv");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("rescue");
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
+is_deeply($svc->{targets}, ["rescue"], "Service $name targets");
 
 $name = "test_del";
 $svc = $cs{$name};
@@ -101,8 +93,7 @@ is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"on", "Service $name state on");
 is($svc->{type}, "service", "Service $name type sysv");
 ok(!$svc->{startstop}, "Service $name startstop true");
-@targets = ("multi-user");
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
+is_deeply($svc->{targets}, ["rescue"], "Service $name targets");
 
 =head1 Test details to string 
 

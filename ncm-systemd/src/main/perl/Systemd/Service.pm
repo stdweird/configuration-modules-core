@@ -53,7 +53,7 @@ Readonly::Array my @DEFAULT_LEVEL2TARGET => ($TARGET_POWEROFF, # 0
                                           $TARGET_GRAPHICAL, # 5
                                           $TARGET_REBOOT); # 6
 
-Readonly my $DEFAULT_LEGACY_RUNLEVEL => 3; # If inittab has not 
+Readonly my $DEFAULT_LEGACY_RUNLEVEL => 3; # If inittab has no default set 
 Readonly my $LEGACY_INITTAB => "/etc/inittab"; # meaningless in systemd
 
 Readonly my $TYPE_SYSV => 'sysv';
@@ -92,8 +92,9 @@ sub _generate_level2target
     foreach my $lvl (0..6) {
         my $target = $DEFAULT_LEVEL2TARGET[$lvl];
         my $id = $self->service_systemctl_show("runlevel$lvl.target")->{Id};
+
         # Is it a target?
-        if ($id =~ m/^(.*)\.target$/) {
+        if ($id && $id =~ m/^(.*)\.target$/) {
             if (! exists($targets{$1})) {
                 $self->verbose("Target $1 for level $lvl none of default targets");
             } elsif (! ($target eq $1)) {
@@ -103,6 +104,7 @@ sub _generate_level2target
             }
             $target = $1;
         } else {
+            $id = "<undef>" if (!defined($id)); # handle unitialized value warning
             $self->warn("Unable to identify target for runlevel$lvl.target (Id $id). Using default target $target.");
         }
         push(@level2target, $target);
@@ -120,28 +122,34 @@ sub service_convert_legacy_levels
     my ($self, $legacylevel) = @_;
     
     if (! @level2target) {
-        $self->vebose("Creating level2target cache");
+        $self->verbose("Creating level2target cache");
         $self->_generate_level2target;
+        if (! @level2target) {
+            $self->error("Failed to generate levle2target cache");
+        };
     }
     
     # only keep the relevant ones
     my @targets;
-    foreach my $lvl (0..6) {
-        if ($legacylevel =~ m/$lvl/) {
-            my $target = $level2target[$lvl];
-            push(@targets, $target) if (! grep {$_ eq $target} @targets);
+    if (defined($legacylevel)) {
+        foreach my $lvl (0..6) {
+            if ($legacylevel =~ m/$lvl/) {
+                my $target = $level2target[$lvl];
+                push(@targets, $target) if (! grep {$_ eq $target} @targets);
+            }
         }
-    }
     
-    # only for non-default/non-valid runlevels?    
-    if (! scalar @targets) {
-        if ($legacylevel) {
-            $self->warn("legacylevel set to $legacylevel, but not converted in new targets. Using default one.");
-        }
+        # only for non-default/non-valid runlevels?    
+        if (! scalar @targets) {
+            $self->warn("legacylevel set to $legacylevel, but not converted in new targets. Using default $DEFAULT_TARGET.");
+            push(@targets, $DEFAULT_TARGET);
+        } 
+        $self->verbose("Converted legacylevel '$legacylevel' in ".join(', ', @targets));
+    } else {
+        $self->verbose("legacylevel undefined, using default $DEFAULT_TARGET");
         push(@targets, $DEFAULT_TARGET);
     };    
     
-    $self->verbose("Converted legacylevel '$legacylevel' in ".join(', ', @targets));
     return \@targets;
 }
 

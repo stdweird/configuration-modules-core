@@ -48,8 +48,7 @@ is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"on", "Service $name state on");
 is($svc->{type}, "sysv", "Service $name type sysv");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("multi-user", "graphical");
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
+is_deeply($svc->{targets}, ["multi-user", "graphical"], "Service $name targets");
 
 $name = "netconsole";
 $svc = $cs{$name};
@@ -57,9 +56,7 @@ is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"off", "Service $name state off");
 is($svc->{type}, "sysv", "Service $name type sysv");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("rescue", "multi-user", "graphical");
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
-
+is_deeply($svc->{targets}, ["rescue", "multi-user", "graphical"], "Service $name targets");
 
 =head 2 Systemd service list
 
@@ -79,8 +76,7 @@ is($svc->{name}, $name, "Service $name name matches");
 is($svc->{state},"disabled", "Service $name state disabled");
 is($svc->{type}, "sysv", "Service $name type sysv");
 ok($svc->{startstop}, "Service $name startstop true");
-@targets = ("rescue", "multi-user", "graphical");
-is(@{$svc->{targets}}, @targets, "Service $name targets ".join(',', @targets));
+is_deeply($svc->{targets}, ["rescue", "multi-user", "graphical"], "Service $name targets");
 
 =head 2 Systemd target list
 
