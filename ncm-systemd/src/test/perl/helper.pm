@@ -28,6 +28,7 @@ use CAF::Object;
 $CAF::Object::NoAction = 1;
 
 use cmddata;
+
 sub set_output {
     my $cmdshort = shift;
     my $cmdline= $cmddata::cmds{$cmdshort}{cmd}|| die "Undefined cmd for cmdshort $cmdshort";
