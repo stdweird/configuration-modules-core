@@ -6,7 +6,11 @@ prefix "/software/components/opennebula/rpc";
 "host" = "myhost.domain";
 "port" = 1234;
 
+prefix "/software/components/opennebula/untouchables";
+"datastores" = list('system');
+
 prefix "/software/components/opennebula";
+
 "vnets" = list(
     nlist(
         "name", "altaria.os",
@@ -59,3 +63,4 @@ prefix "/software/components/opennebula";
 );
 
 "ssh_multiplex" = true;
+"tm_system_ds" = "ssh";
