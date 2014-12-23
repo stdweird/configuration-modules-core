@@ -45,7 +45,11 @@ OpenNebula installation is 100% automated. Therefore:
 
 =head1 INITIAL CREATION
 
+<<<<<<< HEAD
 - The schema details are annotated in the schema file.
+=======
+- The schema details are annotated in the schema file. 
+>>>>>>> 6dc7739eeeecefcbda22cb215a56a6ef4b1fa811
 
 - Example pan files are included in the examples folder and also in the test folders.
 

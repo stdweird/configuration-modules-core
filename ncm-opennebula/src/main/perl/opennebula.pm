@@ -17,7 +17,6 @@ use Data::Dumper;
 use Readonly;
 
 
-
 Readonly::Scalar my $CEPHSECRETFILE => "/var/lib/one/templates/secret/secret_ceph.xml";
 Readonly::Scalar my $MINIMAL_ONE_VERSION => version->new("4.8.0");
 
