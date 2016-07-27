@@ -1,3 +1,5 @@
+# Managed by ncm-spma apt
+#
 # Basic apt sources file. See the man pages for
 # NCM::Component::${project.artifactId} and sources.list
 # for more details.
@@ -8,10 +10,8 @@
 # Name: [% name %]
 # Owner: [% owner %]
 
-[%- IF gpgcheck -%]
-[%- SET trust = "trusted=yes " -%]
-[%- END -%]
-[% FOREACH source IN protocols %]
+[%- trust = gpgcheck ? "trusted=yes " : "" -%]
+[%- FOREACH source IN protocols %]
 # Protocol type: [% source.name %]
 deb [% trust %][% source.url %]
 [%+ END %]
