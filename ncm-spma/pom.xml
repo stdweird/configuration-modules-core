@@ -73,6 +73,13 @@
         <role>author</role>
       </roles>
     </contributor>
+    <contributor>
+      <name>James Adams</name>
+      <email>james.adams@stfc.ac.uk</email>
+      <roles>
+        <role>author</role>
+      </roles>
+    </contributor>
   </contributors>
   <build>
     <pluginManagement>
