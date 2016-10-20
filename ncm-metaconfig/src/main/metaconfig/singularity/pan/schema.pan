@@ -9,7 +9,6 @@ what the container is allowed to do on a particular host, and as a result
 this file must be owned by root.
 }
 type service_singularity = {
-    # standalone ones
     @{Should we allow users to utilize the setuid binary for launching singularity?
     The majority of features require this to be set to yes, but newer Fedora and
     Ubuntu kernels can provide limited functionality in unprivileged mode}
