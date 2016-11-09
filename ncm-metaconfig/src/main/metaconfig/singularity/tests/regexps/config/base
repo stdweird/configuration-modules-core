@@ -3,6 +3,7 @@ Base test for config
 multiline
 /etc/singularity/singularity.conf
 ---
+^allow\spid\sns\s=\syes\s*$
 ^allow\ssetuid\s=\syes\s*$
 ^bind\spath\s=\s.+\s*$
 ^config\sgroup\s=\syes\s*$
@@ -17,5 +18,4 @@ multiline
 ^mount\sslave\s=\syes\s*$
 ^mount\ssys\s=\syes\s*$
 ^mount\stmp\s=\syes\s*$
-^allow\spid\sns\s=\syes\s*$
 ^user\sbind\scontrol\s=\syes\s*$
