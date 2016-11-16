@@ -8,4 +8,4 @@ prefix "/software/components/metaconfig/services/{/etc/singularity/singularity.c
 "mode" = 0644;
 "owner" = "root";
 "group" = "root";
-"module" = "singularity/singularity";
+"module" = "singularity/main";
