@@ -1,4 +1,4 @@
-unique template metaconfig/logstash/forwarder_v2.0;
+unique template metaconfig/logstash/forwarder_2.0;
 
 variable METACONFIG_LOGSTASH_VERSION = 'v2.0';
 include format('metaconfig/logstash/schema_%s', METACONFIG_LOGSTASH_VERSION);

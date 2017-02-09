@@ -1,6 +1,6 @@
 object template config;
 
-variable METACONFIG_LOGSTASH_VERSION = 'v5.0';
+variable METACONFIG_LOGSTASH_VERSION ?= '5.0';
 
 include 'metaconfig/logstash/config';
 
@@ -90,11 +90,25 @@ prefix "/software/components/metaconfig/services/{/etc/logstash/conf.d/logstash.
         dict("grok", dict(
             "match", list(dict(
                 "name", "message",
-                "pattern", "%{GPFSLOG}"
+                "pattern", list("%{GPFSLOG}"),
                 )),
             "patterns_dir", list("/usr/share/grok"),
             "add_field", dict("program", "gpfs"),
             )),
+        dict('drop', dict(
+            "_conditional", dict("expr", list(dict(
+                "left", "[sometag]",
+                "test", "!~",
+                "right", "'^SOME_STRING'",
+                ))),
+            "percentage", 80,
+            "periodic_flush", true,
+            )),
+        dict('drop', dict("_conditional", dict("expr", list(dict(
+            "left", "[someothertag]",
+            "test", "=~",
+            "right", "'^SOME_OTHERSTRING'",
+            ))))),
         dict("date", dict(
             "match", dict(
                 "name", "timestamp",

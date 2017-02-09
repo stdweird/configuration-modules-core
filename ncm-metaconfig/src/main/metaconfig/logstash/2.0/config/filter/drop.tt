@@ -1,2 +1,2 @@
-[%- INCLUDE "metaconfig/logstash/config/type.tt" type="boolean" names=['periodic_flush'] -%]
-[%- INCLUDE "metaconfig/logstash/config/type.tt" type="exact" names=['percentage'] -%]
+[%- INCLUDE "metaconfig/logstash/2.0/config/type.tt" type="boolean" names=['periodic_flush'] -%]
+[%- INCLUDE "metaconfig/logstash/2.0/config/type.tt" type="exact" names=['percentage'] -%]

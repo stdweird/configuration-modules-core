@@ -1,5 +1,10 @@
 object template server;
 
+variable METACONFIG_LOGSTASH_VERSION ?= '5.0';
+variable SYSLOG_RELAY_PORT ?= 5678;
+variable BEAT_RELAY_PORT ?= 26001;
+variable CERT_PKCS8_PASSPHRASE ?= 'DUMMY';
+
 include 'metaconfig/logstash/config';
 
 variable SYSLOG_GROK_PATTERNS ?= {
@@ -160,7 +165,4 @@ prefix "/software/components/metaconfig/services/{/etc/logstash/conf.d/logstash.
         ),
 )));
 
-include 'common/logging/logstash-input-gelf';
-include 'common/logging/logstash-input-beats';
 
-include { if(GPFS_FILEBEAT) { 'common/logging/logstash-filter-gpfs' }};

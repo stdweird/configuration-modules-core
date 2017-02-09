@@ -1,4 +1,4 @@
-declaration template metaconfig/logstash/schema_v2.0;
+declaration template metaconfig/logstash/schema_5.0;
 
 @{ Schema for logstash inputs, outputs and filters. See
 http://logstash.net/docs/1.2.2/ for all the details.
@@ -9,7 +9,6 @@ include 'pan/types';
 type logstash_port_range = long(1..)[] with length(SELF) == 2;
 
 type logstash_ssl = {
-    "ssl_cacert" ? string
     "ssl_cert" ? string
     "ssl_key" ? string
     "ssl_key_passphrase" ? string
@@ -90,8 +89,10 @@ type logstash_input_file = {
 type logstash_input_tcp = {
     include logstash_input_plugin_common
     include logstash_ssl
+    "ssl_extra_chain_certs" ? string[]
     "port" : type_port
     "host" ? type_hostname
+    "mode" ? string = "server" with match(SELF, ("server|client"))
 };
 
 @{ Collecting from udp }
@@ -123,8 +124,8 @@ type logstash_input_lumberjack = {
 @{ beats input }
 type logstash_input_beats = {
     include logstash_input_lumberjack
+    'ssl_certificate_authorities' ? string[]
     'ssl' ? boolean
-    'congestion_threshold' ? long(0..)
 };
 
 type logstash_input_plugin = {
@@ -148,8 +149,8 @@ type logstash_name_patterns = {
     "pattern" : string[]
 };
 
-@{A name_patterdict is rendered differently than a name_patterns}
-type logstash_filter_name_patterdict = {
+@{A name_patternlist is rendered differently than a name_patterns}
+type logstash_filter_name_patternlist = {
     "name" : string
     "pattern" : string[]
 };
@@ -179,7 +180,7 @@ type logstash_filter_bytes2human = {
 
 type logstash_filter_date = {
     include logstash_filter_plugin_common
-    "match" : logstash_filter_name_patterdict
+    "match" : logstash_filter_name_patternlist
 };
 
 type logstash_filter_grep = {
@@ -242,7 +243,6 @@ type logstash_output_codec = {
 type logstash_output_plugin_common = {
     include logstash_plugin_common
     "codec" ? logstash_output_codec
-    "workers" ? long(1..)
 };
 
 @{ GELF-based output }
@@ -256,6 +256,20 @@ type logstash_output_gelf = {
     "ship_tags" : boolean = true
     "facility" ? string
     "sender" ? string
+};
+
+@{ tcp-based output }
+type logstash_output_tcp = {
+    include logstash_output_plugin_common
+    include logstash_ssl
+    "ssl_cacert" ? string
+    "enable_metric" ? boolean = true
+    "host" : type_fqdn
+    "id" ? string
+    "mode" ? string = "client" with match(SELF, ("server|client"))
+    "port" : long
+    "reconnect_interval" ? long
+    "workers" ? number = 1
 };
 
 @{ stdout-based output }
@@ -281,9 +295,10 @@ type logstash_output_elasticsearch = {
 };
 
 type logstash_output_plugin = {
+    "elasticsearch" ? logstash_output_elasticsearch
     "gelf" ? logstash_output_gelf
     "stdout" ? logstash_output_stdout
-    "elasticsearch" ? logstash_output_elasticsearch
+    "tcp" ? logstash_output_tcp
 } with length(SELF) == 1;
 
 type logstash_input_conditional = {

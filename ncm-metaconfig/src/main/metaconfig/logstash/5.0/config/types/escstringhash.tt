@@ -1,7 +1,0 @@
-[%- key %] => {
-[% FILTER indent -%]
-[%-     FOREACH p IN value.pairs -%]
-"[%         CCM.unescape(p.key) %]" => "[% p.value %]"
-[%     END -%]
-[%- END %]
-}[%- -%]
