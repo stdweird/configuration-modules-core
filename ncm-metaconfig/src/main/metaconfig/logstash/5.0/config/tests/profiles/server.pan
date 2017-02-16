@@ -5,7 +5,7 @@ include 'metaconfig/logstash/config';
 variable SYSLOG_GROK_PATTERNS ?= {
     # keep this list in sync with logstash-patterns rpm
     patterns = list('ssh', 'modulecmd', 'lmod', 'nfs', 'ceph', 'opennebula', 'jube', 'keyvalue', 'quattor', 'snoopy');
-    foreach(idx;pattern;patterns) {
+    foreach(idx; pattern; patterns) {
         append(format('%%{RSYSLOGPREFIX}%%{%s_MSG}', to_uppercase(pattern)));
     };
     # always last
@@ -73,7 +73,7 @@ prefix "/software/components/metaconfig/services/{/etc/logstash/conf.d/logstash.
             )),
         dict("mutate", dict(
             "_conditional", dict('expr', list(dict(
-                "left","'_grokparsefailure'",
+                "left", "'_grokparsefailure'",
                 "test", "not in",
                 "right", "[tags]",
                 ))),
@@ -163,4 +163,4 @@ prefix "/software/components/metaconfig/services/{/etc/logstash/conf.d/logstash.
 include 'common/logging/logstash-input-gelf';
 include 'common/logging/logstash-input-beats';
 
-include { if(GPFS_FILEBEAT) { 'common/logging/logstash-filter-gpfs' }};
+include if(GPFS_FILEBEAT) { 'common/logging/logstash-filter-gpfs' };

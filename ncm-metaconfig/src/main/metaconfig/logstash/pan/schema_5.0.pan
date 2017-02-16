@@ -37,7 +37,7 @@ type logstash_plugin_common = {
     @{using _conditional to avoid name clash with plugin option name.
       The conditional is only for the single plugin and has to be type 'if' (the default).}
     "_conditional" ? logstash_conditional with { if (SELF['type'] != 'if') {
-        error('plugin _conditional has to be type if (the default)');}; true;
+        error('plugin _conditional has to be type if (the default)'); }; true;
     }
 };
 
@@ -283,13 +283,13 @@ type logstash_output_elasticsearch = {
     include logstash_output_plugin_common
     "bind_host" ? type_hostname
     "hosts" ? type_hostport[]
-    "host" ? type_hostname with {deprecated(0, 'removed in version 2.0 (use hosts instead)'); true;}
-    "port" ? logstash_port_range with {deprecated(0, 'removed in version 2.0 (use hosts instead)'); true;}
-    "cluster" ? string with {deprecated(0, 'removed in version 2.0'); true;}
-    "embedded" ? boolean = false with {deprecated(0, 'removed in version 2.0'); true;}
+    "host" ? type_hostname with {deprecated(0, 'removed in version 2.0 (use hosts instead)'); true; }
+    "port" ? logstash_port_range with {deprecated(0, 'removed in version 2.0 (use hosts instead)'); true; }
+    "cluster" ? string with {deprecated(0, 'removed in version 2.0'); true; }
+    "embedded" ? boolean = false with {deprecated(0, 'removed in version 2.0'); true; }
     "index" : string = "logstash-%{+YYYY.MM.dd}"
     "flush_size" : long = 5000
-    "index_type" ? string = "%{@type}" with {deprecated(0, 'renamed to document_type in version 2.0'); true;}
+    "index_type" ? string = "%{@type}" with {deprecated(0, 'renamed to document_type in version 2.0'); true; }
     "document_type" : string = "%{@type}"
     "template_overwrite" ? boolean
 };

@@ -1,6 +1,6 @@
 object template server;
 
-variable METACONFIG_LOGSTASH_VERSION='1.2';
+variable METACONFIG_LOGSTASH_VERSION = '1.2';
 
 include 'metaconfig/logstash/config';
 
