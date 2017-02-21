@@ -64,6 +64,8 @@ Readonly my $DIR_SOURCES => "/etc/apt/sources.list.d";
 Readonly my $DIR_PREFERENCES => "/etc/apt/preferences.d";
 Readonly my $TEMPLATE_SOURCES => "apt/source.tt";
 Readonly my $TEMPLATE_PREFERENCES => "apt/preferences.tt";
+Readonly my $TEMPLATE_CONFIG => "apt/config.tt";
+Readonly my $FILE_CONFIG => "/etc/apt/apt.conf.d/98quattor.conf";
 Readonly my $TREE_SOURCES => "/software/repositories";
 Readonly my $TREE_PKGS => "/software/packages";
 Readonly my $BIN_APT_GET => "/usr/bin/apt-get";
@@ -153,6 +155,20 @@ sub generate_sources
     return $changes;
 }
 
+# Write apt configuration file
+sub configure_apt
+{
+    my ($self, $config) = @_;
+    $self->debug(5, 'Entered configure_apt()');
+
+    my $tr = EDG::WP4::CCM::TextRender->new($TEMPLATE_CONFIG, $config, relpath => 'spma', log => $self);
+    if ($tr) {
+        my $fh = $tr->filewriter($FILE_CONFIG, log => $self);
+        return $fh->close() || 0; # handle undef
+    } else {
+        return 0;
+    }
+}
 
 # Returns a set of all installed packages
 sub get_installed_pkgs
@@ -318,6 +334,8 @@ sub Configure
     # Convert these crappily-defined fields into real Perl booleans.
     $tree_component->{run} = $tree_component->{run} eq 'yes';
     $tree_component->{userpkgs} = ($tree_component->{userpkgs} || "no") eq 'yes';
+
+    $self->configure_apt($tree_component) or return 0;
 
     $self->initialize_sources_dir($DIR_SOURCES) or return 0;
 
