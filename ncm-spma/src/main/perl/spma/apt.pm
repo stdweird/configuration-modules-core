@@ -272,7 +272,7 @@ sub resynchronize_package_index
     my $self = shift;
     $self->debug(5, 'Entered resynchronize_package_index()');
 
-    my $cmd = CAF::Process->new($CMD_APT_UPDATE, log => $self);
+    my $cmd = CAF::Process->new($CMD_APT_UPDATE, log => $self, keeps_state => 1);
     return $cmd->execute() ? 1 : undef;
 }
 
