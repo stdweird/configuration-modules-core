@@ -86,6 +86,7 @@ use CAF::Service;
 use CAF::FileReader;
 use CAF::FileEditor;
 use CAF::FileWriter 17.2.1;
+use NetAddr::IP;
 
 use POSIX qw(WIFEXITED WEXITSTATUS);
 use Readonly;
@@ -162,9 +163,11 @@ Readonly my $REMOVE => -1;
 Readonly my $NOCHANGES => 0;
 Readonly my $UPDATED => 1;
 Readonly my $NEW => 2;
+# changes to file, but same config (eg for new file formats)
+Readonly my $KEEPS_STATE => 3;
 
 
-# Giveb the configuration ifcfg filename,
+# Given the configuration ifcfg/route[6]/rule[6] filename,
 # Determine if this is a valid interface for ncm-network to manage,
 # Return interface name when valid, undef otherwise.
 sub is_valid_interface
@@ -689,6 +692,16 @@ sub process_network
         if ($ifname =~ m/^vlan\d+/ && ! $iface->{physdev}) {
             $self->error("vlan device $ifname (with vlan[0-9]{0-9} naming convention) needs physdev set.");
         }
+
+        # split route/rule in IPv4 and IPv6
+        foreach my $type (qw(route rule)) {
+            my $mixed = delete $iface->{$type};
+            foreach my $entry (@$mixed) {
+                # If there's a : in either configured value, it's IPv6
+                my $flavour = (grep {$entry->{$_} =~ m/:/} sort keys %$entry) ? "${type}6" : $type;
+                push(@{$iface->{$flavour}}, $entry);
+            }
+        }
     }
 
     return $nwtree;
@@ -910,8 +923,8 @@ sub make_ifcfg
     return \@text;
 }
 
-# Return ifcfg route content
-sub make_ifcfg_route
+# Return legacy ifcfg IPv4 route content
+sub make_ifcfg_route4_legacy
 {
     my ($self, $routes) = @_;
 
@@ -925,6 +938,47 @@ sub make_ifcfg_route
 
     return \@text;
 }
+
+# Return ifcfg route content in ip format
+sub make_ifcfg_ip_route
+{
+    my ($self, $flavour, $routes) = @_;
+
+    my @text;
+    foreach my $route (@$routes) {
+        if (!$route->{command}) {
+            my $ip;
+            if ($route->{prefix}) {
+                $ip = NetAddr::IP->new("$route->{address}/$route->{prefix}");
+            } else {
+                # in absence of netmask, NetAddr::IP uses 32 or 128
+                $ip = NetAddr::IP->new($route->{address}, $route->{netmask});
+            }
+            # Generate it
+            $route->{command} = "$ip";
+            $route->{command} .= " via $route->{gateway}" if $route->{gateway};
+        }
+        push(@text, $route->{command});
+    }
+
+    return \@text;
+}
+
+# Return ifcfg rule content in ip format
+# Very simple atm, only command supported.
+sub make_ifcfg_ip_rule
+{
+    my ($self, $flavour, $rules) = @_;
+
+    my @text;
+    foreach my $rule (@$rules) {
+        $self->error("Rule without command; skipping") if (!$rule->{command});
+        push(@text, $rule->{command});
+    }
+
+    return \@text;
+}
+
 
 # Return ifcfg alias content
 sub make_ifcfg_alias
@@ -1033,10 +1087,11 @@ sub make_ifdown
 
         my $iface = $self->is_valid_interface($file);
         if ($iface) {
-
             # ifdown: all devices that have files with non-zero status
             if ($exifiles->{$file} == $NOCHANGES) {
                 $self->verbose("No changes for interface $iface (cfg file $file)");
+            } elsif ($exifiles->{$file} == $KEEPS_STATE) {
+                $self->verbose("Change for interface $iface keeps state (cfg file $file)");
             } else {
                 $self->verbose("Will ifdown $iface due to changes in $file (state $exifiles->{$file})");
                 # TODO: ifdown new devices? better safe than sorry?
@@ -1179,7 +1234,9 @@ sub deploy_config
     my $action = 0;
     foreach my $file (sort keys %$exifiles) {
         my $state = $exifiles->{$file};
-        if (($state == $REMOVE) || ($state == $UPDATED) || ($state == $NEW)) {
+        # only these states get new/updated config
+        my $write = ($state == $UPDATED) || ($state == $NEW) || ($state == $KEEPS_STATE);
+        if (($state == $REMOVE) || $write) {
             my $msg = "REMOVE config $file";
             if($self->cleanup($file)) {
                 $self->verbose($msg);
@@ -1189,9 +1246,10 @@ sub deploy_config
             $action = 1;
 
             # set new config file from testcfg
-            if (($state == $UPDATED) || ($state == $NEW)) {
+            if ($write) {
                 my $testcfg = $self->testcfg_filename($file);
-                my $msg = "hardlink UPDATED/NEW testcfg $testcfg to config $file";
+                # KEEPS_STATE is considered UPDATED here
+                my $msg = "hardlink ". ($state == $NEW ? 'NEW' : 'UPDATED')." testcfg $testcfg to config $file";
                 if ($self->hardlink($testcfg, $file)) {
                     $self->verbose($msg);
                 } else {
@@ -1213,11 +1271,11 @@ sub start
     my ($self, $exifiles, $ifup, $nwsrv) = @_;
 
     my @ifaces = sort keys %$ifup;
+    my $nwstate = $exifiles->{$NETWORKCFG};
 
     my $action;
-    if (($exifiles->{$NETWORKCFG} == $UPDATED) ||
-        ($exifiles->{$NETWORKCFG} == $NEW)) {
-        $self->verbose("$NETWORKCFG UPDATED/NEW, starting network");
+    if (($nwstate == $UPDATED) || ($nwstate == $NEW)) {
+        $self->verbose("$NETWORKCFG ", ($nwstate == $NEW ? 'NEW' : 'UPDATED'), " starting network");
         $action = 1;
         $nwsrv->start();
     } elsif (@ifaces) {
@@ -1365,7 +1423,7 @@ sub Configure
     my $text = $self->make_network_cfg($nwtree, $net);
     $exifiles->{$NETWORKCFG} = $self->file_dump($NETWORKCFG, $text);
 
-    # ifcfg- / route- files
+    # ifcfg- / route[6]- files
     foreach my $ifacename (sort keys %$ifaces) {
         my $iface = $ifaces->{$ifacename};
         my $text = $self->make_ifcfg($ifacename, $iface);
@@ -1373,15 +1431,32 @@ sub Configure
         my $file_name = "$IFCFG_DIR/ifcfg-$ifacename";
         $exifiles->{$file_name} = $self->file_dump($file_name, $text);
 
-        # route config, interface based.
-        # TODO: hey, where are the (global) static routes?
-        my $routes = $iface->{route};
-        if (defined($routes)) {
-            my $text = $self->make_ifcfg_route($routes);
+        # route/rule config, interface based.
+        foreach my $flavour (qw(route route6 rule rule6)) {
+            if (defined($iface->{$flavour})) {
+                my $method = "make_ifcfg_ip_$flavour";
+                $method =~ s/6$//;
+                my $text = $self->$method($flavour, $iface->{$flavour});
 
-            my $file_name = "$IFCFG_DIR/route-$ifacename";
-            $exifiles->{$file_name} = $self->file_dump($file_name, $text);
+                my $file_name = "$IFCFG_DIR/$flavour-$ifacename";
+                $exifiles->{$file_name} = $self->file_dump($file_name, $text);
+            }
         }
+
+        # legacy IPv4 format
+        $file_name = "$IFCFG_DIR/route-$ifacename";
+        if (exists($exifiles->{$file_name}) && $exifiles->{$file_name} == $UPDATED) {
+            # IPv4 route data was modified.
+            # Check if it was due to conversion of legacy format or
+            #   if there were actual changes in the config (or both)
+            my $legacy_text = $self->make_ifcfg_route4_legacy($iface->{route});
+            my $fh = CAF::FileReader->new($file_name, log => $self);
+            if ($legacy_text eq "$fh") {
+                $self->verbose("File $file_name will get new content, but due to difference from legacy format");
+                $exifiles->{$file_name} = $KEEPS_STATE;
+            };
+        }
+
 
         # set up aliases for interfaces
         # one file per alias
