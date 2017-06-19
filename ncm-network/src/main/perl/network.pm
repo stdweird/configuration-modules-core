@@ -73,6 +73,7 @@ An example:
 
 =cut
 
+use CAF::Path 17.3.1;
 use parent qw(NCM::Component CAF::Path);
 
 our $EC = LC::Exception::Context->new->will_store_all;
