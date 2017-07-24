@@ -11,7 +11,7 @@ use warnings;
 use NCM::Component;
 our $EC=LC::Exception::Context->new->will_store_all;
 our @ISA = qw(NCM::Component);
-use EDG::WP4::CCM::Element qw(unescape);
+use EDG::WP4::CCM::Path 16.8.0 qw(unescape);
 use EDG::WP4::CCM::TextRender;
 use CAF::Process;
 use CAF::FileWriter;
@@ -1047,6 +1047,8 @@ sub configure_yum
 
     foreach my $key (sort keys %opts) {
         my $v = $opts{$key};
+        use Data::Dumper;
+        $self->info("$cfgfile key $key v $v ",Dumper($v));
         my $value = ref($v) eq 'ARRAY' ? join(($key eq 'exclude') ? ' ' : ',', @$v) : $v;
         $_add_or_replace->($fh, $key, $value);
     };
