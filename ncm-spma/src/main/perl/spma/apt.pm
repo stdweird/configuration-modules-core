@@ -84,18 +84,19 @@ our $NoActionSupported = 1;
 # Wrapper function for calling apt commands
 sub _call_apt
 {
-    my ($self, $cmd) = @_;
+    my ($self, $cmd, $ok) = @_;
     $self->debug(5, '_call_apt: Called with args(%s)', $cmd);
 
     my $proc = CAF::Process->new($cmd);
     my $output = $proc->output();
     my $exitstatus = $? >> 8; # Get exit status from highest 8-bits
-    $self->debug(5, '_call_apt: %s exited with %s', $cmd[0] $exitstatus);
+    $self->debug(5, '_call_apt: %s exited with %s', $proc, $exitstatus);
     if ($exitstatus > 0) {
         $output =~ tr{\n}{ };
-        $self->error('_call_apt: %s failed with "%s"', $cmd[0], $output);
+        my $method = $ok ? 'warn' : 'error';
+        $self->$method('_call_apt: %s failed with "%s"', $proc, $output);
     }
-    return $exitstatus == 0;
+    return $ok || $exitstatus == 0;
 }
 
 # If user specified sources (userrepos) are not allowed, removes any
@@ -157,7 +158,7 @@ sub generate_sources
             $changes += $fh->close() || 0; # handle undef
         } else {
             $self->error("Invalid template '$template' passed to generate_sources");
-            return 0;
+            return;
         }
     }
 
@@ -168,7 +169,7 @@ sub generate_sources
 sub configure_apt
 {
     my ($self, $config) = @_;
-    $self->debug(5, 'configure_apt: Called with args(%s)', $config);
+    $self->debug(5, 'configure_apt: Called with args(%s)', Dumper $config);
 
     my $tr = EDG::WP4::CCM::TextRender->new($TEMPLATE_CONFIG, $config, relpath => 'spma');
     if ($tr) {
@@ -176,7 +177,7 @@ sub configure_apt
         return $fh->close() || 0; # handle undef
     }
     $self->error('configure_apt: TextRender failed to render configuration');
-    return 0;
+    return;
 }
 
 # Returns a set of all installed packages
@@ -285,7 +286,7 @@ sub resynchronize_package_index
     my ($self) = @_;
     $self->debug(5, 'resynchronize_package_index: Called');
 
-    return _call_apt($CMD_APT_UPDATE);
+    return $self->_call_apt($CMD_APT_UPDATE);
 }
 
 
@@ -295,7 +296,9 @@ sub upgrade_packages
     my ($self) = @_;
     $self->debug(5, 'upgrade_packages: Called');
 
-    return _call_apt($CMD_APT_UPGRADE);
+    # it's ok if this produces errors (eg unfinished stuff)
+    # TODO: add support for 'apt --fix-broken install' and things like that
+    return $self->_call_apt($CMD_APT_UPGRADE, 1);
 }
 
 
@@ -305,7 +308,7 @@ sub install_packages
     my ($self, $packages) = @_;
     $self->debug(5, 'install_packages: Called with args(', Dumper($packages), ')');
 
-    return _call_apt([@$CMD_APT_INSTALL, @$packages]);
+    return $self->_call_apt([@$CMD_APT_INSTALL, @$packages]);
 }
 
 
@@ -316,7 +319,7 @@ sub mark_packages_auto
     my ($self, $packages) = @_;
     $self->debug(5, 'mark_packages_auto: Called with args(%s)', $packages);
 
-    return _call_apt([@$CMD_APT_MARK, 'auto', @$packages]);
+    return $self->_call_apt([@$CMD_APT_MARK, 'auto', @$packages]);
 }
 
 
@@ -326,34 +329,36 @@ sub autoremove_packages
     my ($self) = @_;
     $self->debug(5, 'autoremove_packages: Called');
 
-    return _call_apt([@$CMD_APT_AUTOREMOVE]);
+    return $self->_call_apt([@$CMD_APT_AUTOREMOVE]);
 }
 
 
 sub Configure
 {
     my ($self, $config) = @_;
-    $self->debug(5, 'Configure: Called with args(%s)', $config);
 
     # Get configuration trees
     my $tree_sources = $config->getTree($TREE_SOURCES);
+    $self->debug(5, 'TREE_SOURCES ', $TREE_SOURCES, Dumper $tree_sources);
     my $tree_pkgs = $config->getTree($TREE_PKGS);
+    $self->debug(5, 'TREE_PKGS ', $TREE_PKGS, Dumper $tree_pkgs);
     my $tree_component = $config->getTree($self->prefix());
+    $self->debug(5, 'tree_component ', $self->prefix, Dumper $tree_component);
 
-    $self->configure_apt($tree_component) or return 0;
+    defined($self->configure_apt($tree_component)) or return 0;
 
-    $self->initialize_sources_dir($DIR_SOURCES) or return 0;
+    defined($self->initialize_sources_dir($DIR_SOURCES)) or return 0;
 
     # Remove unknown sources if allow_user_sources is not set
     if (! $tree_component->{usersources}) {
         $self->cleanup_old_sources($DIR_SOURCES, $tree_sources) or return 0;
     };
 
-    $self->generate_sources(
+    defined($self->generate_sources(
         $DIR_SOURCES,
         $tree_sources,
         $TEMPLATE_SOURCES,
-    ) or return 0;
+    )) or return 0;
 
     $self->resynchronize_package_index() or return 0;
 
