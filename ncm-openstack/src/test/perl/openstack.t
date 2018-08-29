@@ -183,7 +183,7 @@ ok(method_history_ok([
     'GET .*/users/  ',
     'POST .*/users/ .*"description":"quattor service volume flavour cinder user","domain_id":"dom112233","enabled":true,"name":"cinder","password":"cinder_good_password"',
     'PUT .*/projects/10/tags/ID_user_use12c',
-    'POST .*/users/ .*"description":"quattor service storage flavour glance user","domain_id":"dom112233","enabled":true,"name":"glance","password":"glance_good_password"',
+    'POST .*/users/ .*"description":"quattor service image flavour glance user","domain_id":"dom112233","enabled":true,"name":"glance","password":"glance_good_password"',
     'PUT .*/projects/10/tags/ID_user_use12g',
     'POST .*/users/ .*"description":"quattor service share flavour manila user","domain_id":"dom112233","enabled":true,"name":"manila","password":"manila_good_password"',
     'PUT .*/projects/10/tags/ID_user_use12m',
@@ -208,15 +208,15 @@ ok(method_history_ok([
     'GET .*/endpoints/  ',
     'POST .*/endpoints/ .*"interface":"admin","service_id":"serv111","url":"http://admin".*',
     'PUT .*/projects/10/tags/ID_endpoint_ept1 \{\}',
-    'POST .*/endpoints/ .*"interface":"admin","service_id":"serv112","url":"https://openstack:8774/%\(tenant_id\)s".* ',
+    'POST .*/endpoints/ .*"interface":"admin","service_id":"serv112","url":"https://openstack:8774/v2.1/%\(tenant_id\)s".* ',
     'POST .*/endpoints/ .*"interface":"admin","service_id":"serv113","url":"https://openstack:8778/".* ',
     'POST .*/endpoints/ .*"interface":"internal","service_id":"serv111","url":"http://internal0".*',
     'POST .*/endpoints/ .*"interface":"internal","service_id":"serv111","url":"http://internal1".*',
-    'POST .*/endpoints/ .*"interface":"internal","service_id":"serv112","url":"https://openstack:8774/%\(tenant_id\)s".* ',
+    'POST .*/endpoints/ .*"interface":"internal","service_id":"serv112","url":"https://openstack:8774/v2.1/%\(tenant_id\)s".* ',
     'POST .*/endpoints/ .*"interface":"internal","service_id":"serv113","url":"https://openstack:8778/".* ',
     'POST .*/endpoints/ .*"interface":"public","region_id":"regionThree","service_id":"serv111","url":"http://public".*',
     'POST .*/endpoints/ .*"interface":"public","service_id":"serv113","url":"https://openstack:8778/".* ',
-    'POST .*/endpoints/ .*"interface":"public","service_id":"serv112","url":"https://somehost:8774/%\(tenant_id\)s".* ',
+    'POST .*/endpoints/ .*"interface":"public","service_id":"serv112","url":"https://somehost:8774/v2.1/%\(tenant_id\)s".* ',
 ]), "REST API calls as expected");
 
 command_history_reset();

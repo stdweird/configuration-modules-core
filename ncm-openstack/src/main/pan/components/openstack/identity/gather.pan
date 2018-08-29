@@ -163,10 +163,20 @@ function openstack_identity_gather_service = {
         if (exists(qt['service'])) {
             srvmsg = format("host %s service/flavour %s/%s", host, service, flavour);
             qsrv = qt['service'];
-            qsrv['type'] = service;
+
+            if (exists(qsrv['name'])) {
+                name = qsrv['name'];
+                srvmsg = srvmsg + format(" (name %s)", name);
+            } else {
+                name = flavour;
+            };
+
+            if (!exists(qsrv['type'])) {
+                qsrv['type'] = service;
+            };
             openstack_identity_gather_service_add(
                 data,
-                flavour,
+                name,
                 qsrv,
                 dict(), # no defaults
                 srvmsg,
@@ -199,21 +209,30 @@ function openstack_identity_gather_service = {
   (If short hostname(s) are passed, and the variable OPENSTACK_IDENTITY_GATHER_DOMAIN
   exists, its value will be suffixed as a domain (no leading '.' required)).
   If no openstack configuration is found, host is skipped.
+  (If value is a list, it will be treated as a list of hosts.)
 }
 function openstack_identity_gather = {
     data = ARGV[0];
 
     os_component = '/software/components/openstack';
-    os_services = list('identity', 'network', 'compute', 'storage', 'volume', 'share');
+    os_services = list('identity', 'network', 'compute', 'image',
+                        'volume', 'share', 'catalog', 'orchestration');
 
     hosts = list(list(OBJECT, ''));
     if (ARGC > 1) {
         for (idx = 1; idx < ARGC; idx = idx + 1) {
-            host = ARGV[idx];
-            if (!match('\.', host) && exists(OPENSTACK_IDENTITY_GATHER_DOMAIN)) {
-                host = format('%s.%s', host, OPENSTACK_IDENTITY_GATHER_DOMAIN);
+            arg = ARGV[idx];
+            if (is_list(arg)) {
+                ths = arg;
+            } else {
+                ths = list(arg);
             };
-            hosts = append(hosts, list(host, "//" + host));
+            foreach (i; th; ths) {
+                if (!match('\.', th) && exists(OPENSTACK_IDENTITY_GATHER_DOMAIN)) {
+                    th = format('%s.%s', th, OPENSTACK_IDENTITY_GATHER_DOMAIN);
+                };
+                hosts = append(hosts, list(th, th + ':'));
+            };
         };
     };
 
