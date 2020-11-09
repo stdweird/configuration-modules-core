@@ -12,4 +12,3 @@ multiline
 ^pool pool.ntp.org\s+maxsources 6\s+iburst $
 ^server ntp.date.org\s+iburst trust $
 ^server ntp2.date.org $
-

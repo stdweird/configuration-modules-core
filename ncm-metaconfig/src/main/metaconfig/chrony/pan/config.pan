@@ -7,4 +7,3 @@ bind "/software/components/metaconfig/services/{/etc/chrony.conf}/contents" = ch
 prefix "/software/components/metaconfig/services/{/etc/chrony.conf}";
 'daemons/chronyd' = 'restart';
 'module' = 'chrony/main';
-"convert/joinspace" = true;
